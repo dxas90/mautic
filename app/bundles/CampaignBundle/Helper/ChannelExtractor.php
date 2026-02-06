@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Helper;
 
 use Mautic\CampaignBundle\Entity\ChannelInterface;
@@ -17,12 +8,7 @@ use Mautic\CampaignBundle\EventCollector\Accessor\Event\AbstractEventAccessor;
 
 class ChannelExtractor
 {
-    /**
-     * @param ChannelInterface      $entity
-     * @param Event                 $event
-     * @param AbstractEventAccessor $eventConfig
-     */
-    public static function setChannel(ChannelInterface $entity, Event $event, AbstractEventAccessor $eventConfig)
+    public static function setChannel(ChannelInterface $entity, Event $event, AbstractEventAccessor $eventConfig): void
     {
         // Allow event to update itself
         $isSelf = $entity === $event;
@@ -51,19 +37,16 @@ class ChannelExtractor
     }
 
     /**
-     * @param array  $properties
      * @param string $channelIdField
-     *
-     * @return null|int
      */
-    private static function getChannelId(array $properties, $channelIdField)
+    private static function getChannelId(array $properties, $channelIdField): ?int
     {
         if (empty($properties[$channelIdField])) {
             return null;
         }
 
         $channelId = $properties[$channelIdField];
-        if (is_array($channelId) && (count($channelId) === 1)) {
+        if (is_array($channelId) && (1 === count($channelId))) {
             // Only store channel ID if a single item was selected
             $channelId = reset($channelId);
         }

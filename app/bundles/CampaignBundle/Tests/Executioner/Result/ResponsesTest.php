@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Tests\Executioner\Result;
 
 use Doctrine\Common\Collections\ArrayCollection;
@@ -16,9 +7,9 @@ use Mautic\CampaignBundle\Entity\Event;
 use Mautic\CampaignBundle\Entity\LeadEventLog;
 use Mautic\CampaignBundle\Executioner\Result\Responses;
 
-class ResponsesTest extends \PHPUnit_Framework_TestCase
+class ResponsesTest extends \PHPUnit\Framework\TestCase
 {
-    public function testExtractingResponsesFromLog()
+    public function testExtractingResponsesFromLog(): void
     {
         $actionEvent = $this->createMock(Event::class);
         $actionEvent->method('getEventType')
@@ -89,14 +80,6 @@ class ResponsesTest extends \PHPUnit_Framework_TestCase
                 ],
             ],
         ];
-
-        $this->assertEquals(
-            [
-                'action'    => $actions,
-                'condition' => $conditions,
-            ],
-            $responses->getResponseArray()
-        );
 
         $this->assertEquals($actions, $responses->getActionResponses());
         $this->assertEquals($conditions, $responses->getConditionResponses());

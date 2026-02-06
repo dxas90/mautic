@@ -1,86 +1,32 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\EmailBundle\MonitoredEmail\Processor;
 
-use Mautic\EmailBundle\Entity\StatRepository;
+use Mautic\EmailBundle\Mailer\Transport\UnsubscriptionProcessorInterface;
 use Mautic\EmailBundle\MonitoredEmail\Exception\UnsubscriptionNotFound;
 use Mautic\EmailBundle\MonitoredEmail\Message;
 use Mautic\EmailBundle\MonitoredEmail\Processor\Unsubscription\Parser;
 use Mautic\EmailBundle\MonitoredEmail\Search\ContactFinder;
-use Mautic\EmailBundle\Swiftmailer\Transport\UnsubscriptionProcessorInterface;
 use Mautic\LeadBundle\Entity\DoNotContact;
-use Mautic\LeadBundle\Model\LeadModel;
+use Mautic\LeadBundle\Model\DoNotContact as DoNotContactModel;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\Translation\TranslatorInterface;
+use Symfony\Component\Mailer\Transport\TransportInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class Unsubscribe implements ProcessorInterface
 {
-    /**
-     * @var \Swift_Transport
-     */
-    private $transport;
+    private ?Message $message = null;
 
-    /**
-     * @var ContactFinder
-     */
-    private $contactFinder;
-
-    /**
-     * @var LeadModel
-     */
-    private $leadModel;
-
-    /**
-     * @var TranslatorInterface
-     */
-    private $translator;
-
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-
-    /**
-     * @var Message
-     */
-    private $message;
-
-    /**
-     * Bounce constructor.
-     *
-     * @param \Swift_Transport $transport
-     * @param ContactFinder    $contactFinder
-     * @param StatRepository   $statRepository
-     * @param LeadModel        $leadModel
-     * @param LoggerInterface  $logger
-     */
     public function __construct(
-        \Swift_Transport $transport,
-        ContactFinder $contactFinder,
-        LeadModel $leadModel,
-        TranslatorInterface $translator,
-        LoggerInterface $logger
+        private TransportInterface $transport,
+        private ContactFinder $contactFinder,
+        private TranslatorInterface $translator,
+        private LoggerInterface $logger,
+        private DoNotContactModel $doNotContact,
     ) {
-        $this->transport     = $transport;
-        $this->contactFinder = $contactFinder;
-        $this->leadModel     = $leadModel;
-        $this->translator    = $translator;
-        $this->logger        = $logger;
     }
 
-    /**
-     * @return bool
-     */
-    public function process(Message $message)
+    public function process(Message $message): bool
     {
         $this->message = $message;
         $this->logger->debug('MONITORED EMAIL: Processing message ID '.$this->message->id.' for an unsubscription');
@@ -91,7 +37,7 @@ class Unsubscribe implements ProcessorInterface
         if ($this->transport instanceof UnsubscriptionProcessorInterface) {
             try {
                 $unsubscription = $this->transport->processUnsubscription($this->message);
-            } catch (UnsubscriptionNotFound $exception) {
+            } catch (UnsubscriptionNotFound) {
                 // Attempt to parse a unsubscription the standard way
             }
         }
@@ -100,7 +46,7 @@ class Unsubscribe implements ProcessorInterface
             try {
                 $parser         = new Parser($message);
                 $unsubscription = $parser->parse();
-            } catch (UnsubscriptionNotFound $exception) {
+            } catch (UnsubscriptionNotFound) {
                 // No stat found so bail as we won't consider this a reply
                 $this->logger->debug('MONITORED EMAIL: Unsubscription email was not found');
 
@@ -123,7 +69,7 @@ class Unsubscribe implements ProcessorInterface
 
         $comments = $this->translator->trans('mautic.email.bounce.reason.unsubscribed');
         foreach ($contacts as $contact) {
-            $this->leadModel->addDncForLead($contact, $channel, $comments, DoNotContact::UNSUBSCRIBED);
+            $this->doNotContact->addDncForContact($contact->getId(), $channel, DoNotContact::UNSUBSCRIBED, $comments);
         }
 
         return true;

@@ -1,58 +1,50 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Form\Type;
 
-use Mautic\CoreBundle\Factory\MauticFactory;
+use Mautic\CampaignBundle\Entity\Campaign;
+use Mautic\CategoryBundle\Form\Type\CategoryListType;
 use Mautic\CoreBundle\Form\EventListener\CleanFormSubscriber;
 use Mautic\CoreBundle\Form\EventListener\FormExitSubscriber;
+use Mautic\CoreBundle\Form\Type\FormButtonsType;
+use Mautic\CoreBundle\Form\Type\PublishDownDateType;
+use Mautic\CoreBundle\Form\Type\PublishUpDateType;
+use Mautic\CoreBundle\Form\Type\YesNoButtonGroupType;
+use Mautic\CoreBundle\Helper\CoreParametersHelper;
+use Mautic\CoreBundle\Security\Permissions\CorePermissions;
+use Mautic\ProjectBundle\Form\Type\ProjectType;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\HiddenType;
+use Symfony\Component\Form\Extension\Core\Type\TextareaType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
-use Symfony\Component\OptionsResolver\OptionsResolverInterface;
+use Symfony\Component\OptionsResolver\OptionsResolver;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * Class CampaignType.
+ * @extends AbstractType<Campaign>
  */
 class CampaignType extends AbstractType
 {
-    private $security;
-    private $translator;
-    private $em;
-
-    /**
-     * @param MauticFactory $factory
-     */
-    public function __construct(MauticFactory $factory)
-    {
-        $this->translator = $factory->getTranslator();
-        $this->security   = $factory->getSecurity();
-        $this->em         = $factory->getEntityManager();
+    public function __construct(
+        private CorePermissions $security,
+        private TranslatorInterface $translator,
+        private CoreParametersHelper $coreParametersHelper,
+    ) {
     }
 
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->addEventSubscriber(new CleanFormSubscriber(['description' => 'html']));
         $builder->addEventSubscriber(new FormExitSubscriber('campaign', $options));
 
-        $builder->add('name', 'text', [
+        $builder->add('name', TextType::class, [
             'label'      => 'mautic.core.name',
             'label_attr' => ['class' => 'control-label'],
             'attr'       => ['class' => 'form-control'],
         ]);
 
-        $builder->add('description', 'textarea', [
+        $builder->add('description', TextareaType::class, [
             'label'      => 'mautic.core.description',
             'label_attr' => ['class' => 'control-label'],
             'attr'       => ['class' => 'form-control editor'],
@@ -60,7 +52,7 @@ class CampaignType extends AbstractType
         ]);
 
         $builder->add('allowRestart',
-            'yesno_button_group',
+            YesNoButtonGroupType::class,
             [
                 'label' => 'mautic.campaign.allow_restart',
                 'attr'  => [
@@ -69,14 +61,30 @@ class CampaignType extends AbstractType
             ]
         );
 
-        //add category
-        $builder->add('category', 'category', [
+        // add category
+        $builder->add('category', CategoryListType::class, [
             'bundle' => 'campaign',
         ]);
 
-        if (!empty($options['data']) && $options['data']->getId()) {
-            $readonly = !$this->security->isGranted('campaign:campaigns:publish');
-            $data     = $options['data']->isPublished(false);
+        $attr = [];
+        /** @var ?Campaign $campaign */
+        $campaign = $options['data'] ?? null;
+        if ($campaign && $campaign->getId()) {
+            $readonly          = !$this->security->isGranted('campaign:campaigns:publish');
+            $data              = $campaign->isPublished(false);
+            $republishBehavior = $campaign->getRepublishBehavior() ?? $this->coreParametersHelper->get('campaign_republish_behavior');
+            $republishBehavior = $this->translator->trans('mautic.campaignconfig.campaign_republish_behavior.'.$republishBehavior);
+            $attr              = [
+                'onchange'               => 'Mautic.showCampaignConfirmation(mQuery(this));',
+                'data-toggle'            => 'confirmation',
+                'data-message-publish'   => $this->translator->trans('mautic.campaign.form.confirmation.message.publish', ['%republishBehavior%' => $republishBehavior]),
+                'data-message-unpublish' => $this->translator->trans('mautic.campaign.form.confirmation.message'),
+                'data-confirm-text'      => $this->translator->trans('mautic.campaign.form.confirmation.confirm_text'),
+                'data-confirm-callback'  => 'dismissConfirmation',
+                'data-cancel-text'       => $this->translator->trans('mautic.campaign.form.confirmation.cancel_text'),
+                'data-cancel-callback'   => 'setPublishedButtonToYes',
+                'class'                  => 'btn btn-ghost',
+            ];
         } elseif (!$this->security->isGranted('campaign:campaigns:publish')) {
             $readonly = true;
             $data     = false;
@@ -85,36 +93,25 @@ class CampaignType extends AbstractType
             $data     = false;
         }
 
-        $builder->add('isPublished', 'yesno_button_group', [
-            'read_only' => $readonly,
-            'data'      => $data,
+        $attr['readonly'] = $readonly;
+
+        $builder->add('isPublished', YesNoButtonGroupType::class, [
+            'data' => $data,
+            'attr' => $attr,
         ]);
 
-        $builder->add('publishUp', 'datetime', [
-            'widget'     => 'single_text',
-            'label'      => 'mautic.core.form.publishup',
-            'label_attr' => ['class' => 'control-label'],
-            'attr'       => [
-                'class'       => 'form-control',
-                'data-toggle' => 'datetime',
-            ],
-            'format'   => 'yyyy-MM-dd HH:mm',
-            'required' => false,
-        ]);
+        $builder->add('publishUp', PublishUpDateType::class);
+        $builder->add('publishDown', PublishDownDateType::class);
 
-        $builder->add('publishDown', 'datetime', [
-            'widget'     => 'single_text',
-            'label'      => 'mautic.core.form.publishdown',
-            'label_attr' => ['class' => 'control-label'],
-            'attr'       => [
-                'class'       => 'form-control',
-                'data-toggle' => 'datetime',
-            ],
-            'format'   => 'yyyy-MM-dd HH:mm',
-            'required' => false,
-        ]);
+        $builder->add(
+            'republishBehavior',
+            RepublishBehaviorType::class,
+            [
+                'include_global_option' => true,
+            ]
+        );
 
-        $builder->add('sessionId', 'hidden', [
+        $builder->add('sessionId', HiddenType::class, [
             'mapped' => false,
         ]);
 
@@ -122,36 +119,35 @@ class CampaignType extends AbstractType
             $builder->setAction($options['action']);
         }
 
-        $builder->add('buttons', 'form_buttons', [
+        $builder->add('projects', ProjectType::class);
+
+        $builder->add('buttons', FormButtonsType::class, [
             'pre_extra_buttons' => [
                 [
                     'name'  => 'builder',
                     'label' => 'mautic.campaign.campaign.launch.builder',
                     'attr'  => [
-                        'class'   => 'btn btn-default btn-dnd',
-                        'icon'    => 'fa fa-cube',
+                        'class'   => 'btn btn-tertiary btn-dnd',
+                        'icon'    => 'ri-organization-chart',
                         'onclick' => 'Mautic.launchCampaignEditor();',
                     ],
                 ],
             ],
         ]);
-    }
 
-    /**
-     * @param OptionsResolverInterface $resolver
-     */
-    public function setDefaultOptions(OptionsResolverInterface $resolver)
-    {
-        $resolver->setDefaults([
-            'data_class' => 'Mautic\CampaignBundle\Entity\Campaign',
+        $builder->add('version', HiddenType::class, [
+            'mapped' => false,
+        ]);
+
+        $builder->add('campaignElements', HiddenType::class, [
+            'mapped' => false,
         ]);
     }
 
-    /**
-     * @return string
-     */
-    public function getName()
+    public function configureOptions(OptionsResolver $resolver): void
     {
-        return 'campaign';
+        $resolver->setDefaults([
+            'data_class' => Campaign::class,
+        ]);
     }
 }

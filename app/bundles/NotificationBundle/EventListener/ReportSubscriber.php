@@ -1,59 +1,31 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\NotificationBundle\EventListener;
 
 use Doctrine\DBAL\Connection;
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
 use Mautic\CoreBundle\Helper\Chart\LineChart;
 use Mautic\LeadBundle\Model\CompanyReportData;
+use Mautic\NotificationBundle\Entity\StatRepository;
 use Mautic\ReportBundle\Event\ReportBuilderEvent;
 use Mautic\ReportBundle\Event\ReportGeneratorEvent;
 use Mautic\ReportBundle\Event\ReportGraphEvent;
 use Mautic\ReportBundle\ReportEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
-/**
- * Class ReportSubscriber.
- */
-class ReportSubscriber extends CommonSubscriber
+class ReportSubscriber implements EventSubscriberInterface
 {
-    const MOBILE_NOTIFICATIONS       = 'mobile_notifications';
-    const MOBILE_NOTIFICATIONS_STATS = 'mobile_notifications.stats';
+    public const MOBILE_NOTIFICATIONS       = 'mobile_notifications';
 
-    /**
-     * @var Connection
-     */
-    protected $db;
+    public const MOBILE_NOTIFICATIONS_STATS = 'mobile_notifications.stats';
 
-    /**
-     * @var CompanyReportData
-     */
-    private $companyReportData;
-
-    /**
-     * ReportSubscriber constructor.
-     *
-     * @param Connection        $db
-     * @param CompanyReportData $companyReportData
-     */
-    public function __construct(Connection $db, CompanyReportData $companyReportData)
-    {
-        $this->db                = $db;
-        $this->companyReportData = $companyReportData;
+    public function __construct(
+        private Connection $db,
+        private CompanyReportData $companyReportData,
+        private StatRepository $statRepository,
+    ) {
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             ReportEvents::REPORT_ON_BUILD          => ['onReportBuilder', 0],
@@ -64,10 +36,8 @@ class ReportSubscriber extends CommonSubscriber
 
     /**
      * Add available tables and columns to the report builder lookup.
-     *
-     * @param ReportBuilderEvent $event
      */
-    public function onReportBuilder(ReportBuilderEvent $event)
+    public function onReportBuilder(ReportBuilderEvent $event): void
     {
         if (!$event->checkContext([self::MOBILE_NOTIFICATIONS, self::MOBILE_NOTIFICATIONS_STATS])) {
             return;
@@ -196,10 +166,8 @@ class ReportSubscriber extends CommonSubscriber
 
     /**
      * Initialize the QueryBuilder object to generate reports from.
-     *
-     * @param ReportGeneratorEvent $event
      */
-    public function onReportGenerate(ReportGeneratorEvent $event)
+    public function onReportGenerate(ReportGeneratorEvent $event): void
     {
         if (!$event->checkContext([self::MOBILE_NOTIFICATIONS, self::MOBILE_NOTIFICATIONS_STATS])) {
             return;
@@ -219,7 +187,7 @@ class ReportSubscriber extends CommonSubscriber
                 $qb->from(MAUTIC_TABLE_PREFIX.'push_notifications', 'pn');
                 $event->addCategoryLeftJoin($qb, 'pn');
 
-                if ($event->hasColumn($clickColumns) || $event->hasFilter($clickColumns)) {
+                if ($event->usesColumn($clickColumns)) {
                     $qbcut->select(
                         'COUNT(cut2.channel_id) AS trackable_count, SUM(cut2.hits) AS hits',
                         'SUM(cut2.unique_hits) AS unique_hits',
@@ -240,7 +208,7 @@ class ReportSubscriber extends CommonSubscriber
                     ->addIpAddressLeftJoin($qb, 'pns')
                     ->applyDateFilters($qb, 'date_sent', 'pns');
 
-                if ($event->hasColumn($clickColumns) || $event->hasFilter($clickColumns)) {
+                if ($event->usesColumn($clickColumns)) {
                     $qbcut->select('COUNT(ph.id) AS hits', 'COUNT(DISTINCT(ph.redirect_id)) AS unique_hits', 'cut2.channel_id', 'ph.lead_id')
                         ->from(MAUTIC_TABLE_PREFIX.'channel_url_trackables', 'cut2')
                         ->join(
@@ -266,19 +234,16 @@ class ReportSubscriber extends CommonSubscriber
 
     /**
      * Initialize the QueryBuilder object to generate reports from.
-     *
-     * @param ReportGraphEvent $event
      */
-    public function onReportGraphGenerate(ReportGraphEvent $event)
+    public function onReportGraphGenerate(ReportGraphEvent $event): void
     {
         // Context check, we only want to fire for Mobile Notification reports
         if (!$event->checkContext(self::MOBILE_NOTIFICATIONS_STATS)) {
             return;
         }
 
-        $graphs   = $event->getRequestedGraphs();
-        $qb       = $event->getQueryBuilder();
-        $statRepo = $this->em->getRepository('MauticNotificationBundle:Stat');
+        $graphs = $event->getRequestedGraphs();
+        $qb     = $event->getQueryBuilder();
 
         foreach ($graphs as $g) {
             $options      = $event->getOptions($g);
@@ -315,11 +280,11 @@ class ReportSubscriber extends CommonSubscriber
                         ->orderBy('sent', 'DESC');
                     $limit                  = 10;
                     $offset                 = 0;
-                    $items                  = $statRepo->getMostNotifications($queryBuilder, $limit, $offset);
+                    $items                  = $this->statRepository->getMostNotifications($queryBuilder, $limit, $offset);
                     $graphData              = [];
                     $graphData['data']      = $items;
                     $graphData['name']      = $g;
-                    $graphData['iconClass'] = 'fa-paper-plane-o';
+                    $graphData['iconClass'] = 'ri-send-plane-line';
                     $graphData['link']      = 'mautic_mobile_notification_action';
                     $event->setGraph($g, $graphData);
                     break;
@@ -330,11 +295,11 @@ class ReportSubscriber extends CommonSubscriber
                         ->orderBy('"read"', 'DESC');
                     $limit                  = 10;
                     $offset                 = 0;
-                    $items                  = $statRepo->getMostNotifications($queryBuilder, $limit, $offset);
+                    $items                  = $this->statRepository->getMostNotifications($queryBuilder, $limit, $offset);
                     $graphData              = [];
                     $graphData['data']      = $items;
                     $graphData['name']      = $g;
-                    $graphData['iconClass'] = 'fa-eye';
+                    $graphData['iconClass'] = 'ri-eye-line';
                     $graphData['link']      = 'mautic_mobile_notification_action';
                     $event->setGraph($g, $graphData);
                     break;
@@ -345,11 +310,11 @@ class ReportSubscriber extends CommonSubscriber
                         ->orderBy('ratio', 'DESC');
                     $limit                  = 10;
                     $offset                 = 0;
-                    $items                  = $statRepo->getMostNotifications($queryBuilder, $limit, $offset);
+                    $items                  = $this->statRepository->getMostNotifications($queryBuilder, $limit, $offset);
                     $graphData              = [];
                     $graphData['data']      = $items;
                     $graphData['name']      = $g;
-                    $graphData['iconClass'] = 'fa-tachometer';
+                    $graphData['iconClass'] = 'ri-speed-up-line';
                     $graphData['link']      = 'mautic_mobile_notification_action';
                     $event->setGraph($g, $graphData);
                     break;

@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ReportBundle\Scheduler\Entity;
 
 use Mautic\ReportBundle\Scheduler\Enum\SchedulerEnum;
@@ -17,31 +8,17 @@ use Mautic\ReportBundle\Scheduler\SchedulerInterface;
 class SchedulerEntity implements SchedulerInterface
 {
     /**
-     * @var bool
+     * @param bool        $isScheduled
+     * @param string|null $scheduleUnit
+     * @param string|null $scheduleDay
+     * @param string|null $scheduleMonthFrequency
      */
-    private $isScheduled = false;
-
-    /**
-     * @var null|string
-     */
-    private $scheduleUnit;
-
-    /**
-     * @var null|string
-     */
-    private $scheduleDay;
-
-    /**
-     * @var null|string
-     */
-    private $scheduleMonthFrequency;
-
-    public function __construct($isScheduled, $scheduleUnit, $scheduleDay, $scheduleMonthFrequency)
-    {
-        $this->isScheduled            = $isScheduled;
-        $this->scheduleUnit           = $scheduleUnit;
-        $this->scheduleDay            = $scheduleDay;
-        $this->scheduleMonthFrequency = $scheduleMonthFrequency;
+    public function __construct(
+        private $isScheduled,
+        private $scheduleUnit,
+        private $scheduleDay,
+        private $scheduleMonthFrequency,
+    ) {
     }
 
     /**
@@ -53,7 +30,7 @@ class SchedulerEntity implements SchedulerInterface
     }
 
     /**
-     * @return null|string
+     * @return string|null
      */
     public function getScheduleUnit()
     {
@@ -61,7 +38,7 @@ class SchedulerEntity implements SchedulerInterface
     }
 
     /**
-     * @return null|string
+     * @return string|null
      */
     public function getScheduleDay()
     {
@@ -69,30 +46,35 @@ class SchedulerEntity implements SchedulerInterface
     }
 
     /**
-     * @return null|string
+     * @return string|null
      */
     public function getScheduleMonthFrequency()
     {
         return $this->scheduleMonthFrequency;
     }
 
-    public function isScheduledDaily()
+    public function isScheduledNow(): bool
     {
-        return $this->getScheduleUnit() === SchedulerEnum::UNIT_DAILY;
+        return SchedulerEnum::UNIT_NOW === $this->getScheduleUnit();
     }
 
-    public function isScheduledWeekly()
+    public function isScheduledDaily(): bool
     {
-        return $this->getScheduleUnit() === SchedulerEnum::UNIT_WEEKLY;
+        return SchedulerEnum::UNIT_DAILY === $this->getScheduleUnit();
     }
 
-    public function isScheduledMonthly()
+    public function isScheduledWeekly(): bool
     {
-        return $this->getScheduleUnit() === SchedulerEnum::UNIT_MONTHLY;
+        return SchedulerEnum::UNIT_WEEKLY === $this->getScheduleUnit();
     }
 
-    public function isScheduledWeekDays()
+    public function isScheduledMonthly(): bool
     {
-        return $this->getScheduleDay() === SchedulerEnum::DAY_WEEK_DAYS;
+        return SchedulerEnum::UNIT_MONTHLY === $this->getScheduleUnit();
+    }
+
+    public function isScheduledWeekDays(): bool
+    {
+        return SchedulerEnum::DAY_WEEK_DAYS === $this->getScheduleDay();
     }
 }

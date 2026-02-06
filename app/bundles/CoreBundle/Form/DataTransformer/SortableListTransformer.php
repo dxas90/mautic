@@ -1,59 +1,29 @@
 <?php
 
-/*
- * @copyright   2016 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CoreBundle\Form\DataTransformer;
 
 use Mautic\CoreBundle\Helper\AbstractFormFieldHelper;
 use Symfony\Component\Form\DataTransformerInterface;
 
 /**
- * Class SortableListTransformer.
+ * @implements DataTransformerInterface<array<mixed>, array<mixed>>
  */
 class SortableListTransformer implements DataTransformerInterface
 {
     /**
-     * @var bool
-     */
-    private $removeEmpty = true;
-
-    /**
-     * @var bool
-     */
-    private $withLabels = true;
-
-    /**
-     * @var bool
-     */
-    private $useKeyValuePairs = false;
-
-    /**
-     * SortableListTransformer constructor.
-     *
-     * @param bool $removeEmpty
      * @param bool $withLabels
-     * @param bool $atRootLevel
+     * @param bool $useKeyValuePairs
      */
-    public function __construct($removeEmpty = true, $withLabels = true, $useKeyValuePairs = false)
-    {
-        $this->removeEmpty      = $removeEmpty;
-        $this->withLabels       = $withLabels;
-        $this->useKeyValuePairs = $useKeyValuePairs;
+    public function __construct(
+        private $withLabels = true,
+        private $useKeyValuePairs = false,
+    ) {
     }
 
     /**
-     * {@inheritdoc}
-     *
-     * @return array
+     * @return array<mixed>
      */
-    public function transform($array)
+    public function transform(mixed $array): mixed
     {
         if ($this->useKeyValuePairs) {
             return $this->transformKeyValuePair($array);
@@ -63,11 +33,9 @@ class SortableListTransformer implements DataTransformerInterface
     }
 
     /**
-     * {@inheritdoc}
-     *
-     * @return array
+     * @return array<mixed>
      */
-    public function reverseTransform($array)
+    public function reverseTransform(mixed $array): mixed
     {
         if ($this->useKeyValuePairs) {
             return $this->reverseTransformKeyValuePair($array);
@@ -77,17 +45,20 @@ class SortableListTransformer implements DataTransformerInterface
     }
 
     /**
-     * @param $array
+     * @param array<mixed>|null $array
      *
-     * @return mixed
+     * @return array<mixed>
      */
-    private function formatList($array)
+    private function formatList(?array $array): array
     {
         if (null === $array || !isset($array['list'])) {
             return ['list' => []];
         }
 
-        $array['list'] = AbstractFormFieldHelper::parseList($array['list'], $this->removeEmpty);
+        // Reindex the array before processing
+        $array['list'] = array_values($array['list']);
+
+        $array['list'] = AbstractFormFieldHelper::parseList($array['list']);
 
         if (!$this->withLabels) {
             $array['list'] = array_keys($array['list']);
@@ -100,11 +71,9 @@ class SortableListTransformer implements DataTransformerInterface
     }
 
     /**
-     * @param $array
-     *
-     * @return array
+     * @return array<mixed>
      */
-    private function transformKeyValuePair($array)
+    private function transformKeyValuePair($array): array
     {
         if (null === $array) {
             return ['list' => []];
@@ -123,11 +92,11 @@ class SortableListTransformer implements DataTransformerInterface
     }
 
     /**
-     * @param $array
+     * @param array<mixed> $array
      *
-     * @return array
+     * @return array<mixed>
      */
-    private function reverseTransformKeyValuePair($array)
+    private function reverseTransformKeyValuePair(?array $array): array
     {
         if (null === $array || !isset($array['list'])) {
             return [];

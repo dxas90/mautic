@@ -1,43 +1,60 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\UserBundle\Entity;
 
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
 use Doctrine\ORM\Mapping as ORM;
 use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
+use Mautic\CoreBundle\Entity\CacheInvalidateInterface;
 use Mautic\CoreBundle\Entity\FormEntity;
-use Mautic\CoreBundle\Helper\Serializer;
+use Mautic\UserBundle\Form\Validator\Constraints\NotWeak;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Form\Form;
-use Symfony\Component\Security\Core\User\AdvancedUserInterface;
 use Symfony\Component\Security\Core\User\EquatableInterface;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Mapping\ClassMetadata;
 
-/**
- * Class User.
- */
-class User extends FormEntity implements AdvancedUserInterface, \Serializable, EquatableInterface
+#[ApiResource(
+    shortName: 'User',
+    operations: [
+        new GetCollection(uriTemplate: '/users', security: "is_granted('user:users:viewown')"),
+        new Post(uriTemplate: '/users', security: "is_granted('user:users:create')", processor: \Mautic\UserBundle\ApiPlatform\UserProcessor::class),
+        new Get(uriTemplate: '/users/{id}', security: "is_granted('user:users:viewown')"),
+        new Put(uriTemplate: '/users/{id}', security: "is_granted('user:users:editown')", processor: \Mautic\UserBundle\ApiPlatform\UserProcessor::class),
+        new Patch(uriTemplate: '/users/{id}', security: "is_granted('user:users:editother')", processor: \Mautic\UserBundle\ApiPlatform\UserProcessor::class),
+        new Delete(uriTemplate: '/users/{id}', security: "is_granted('user:users:deleteown')"),
+    ],
+    normalizationContext: [
+        'groups'                  => ['user:read'],
+        'swagger_definition_name' => 'Read',
+    ],
+    denormalizationContext: [
+        'groups'                  => ['user:write'],
+        'swagger_definition_name' => 'Write',
+    ]
+)]
+class User extends FormEntity implements UserInterface, EquatableInterface, PasswordAuthenticatedUserInterface, CacheInvalidateInterface
 {
-    /**
-     * @var int
-     */
-    protected $id;
+    public const CACHE_NAMESPACE = 'User';
 
     /**
-     * @var string
+     * @var ?int
      */
-    protected $username;
+    #[Groups(['user:read'])]
+    protected $id;
+
+    #[Groups(['user:read', 'user:write'])]
+    protected ?string $username = null;
 
     /**
      * @var string
@@ -47,127 +64,108 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     /**
      * Used for when updating the password.
      *
-     * @var string
+     * @var ?string
      */
+    #[Groups(['user:write'])]
     private $plainPassword;
 
     /**
      * Used for updating account.
      *
-     * @var string
+     * @var ?string
      */
     private $currentPassword;
 
     /**
      * @var string
      */
+    #[Groups(['user:read', 'user:write'])]
     private $firstName;
 
     /**
      * @var string
      */
+    #[Groups(['user:read', 'user:write'])]
     private $lastName;
 
     /**
      * @var string
      */
+    #[Groups(['user:read', 'user:write'])]
     private $email;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['user:read', 'user:write'])]
     private $position;
 
     /**
      * @var Role
      */
+    #[Groups(['user:read', 'user:write'])]
     private $role;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['user:read', 'user:write'])]
     private $timezone = '';
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['user:read', 'user:write'])]
     private $locale = '';
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
+    #[Groups(['user:read'])]
     private $lastLogin;
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
+    #[Groups(['user:read'])]
     private $lastActive;
 
     /**
-     * @var string
-     */
-    private $onlineStatus = 'offline';
-
-    /**
      * Stores active role permissions.
-     *
-     * @var
      */
     private $activePermissions;
 
     /**
      * @var array
      */
+    #[Groups(['user:read', 'user:write'])]
     private $preferences = [];
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['user:read', 'user:write'])]
     private $signature;
 
     /**
-     * @var bool
+     * @param bool $guest
      */
-    private $guest = false;
-
-    /**
-     * User constructor.
-     *
-     * @param bool $isGuest
-     */
-    public function __construct($isGuest = false)
-    {
-        $this->guest = $isGuest;
+    public function __construct(
+        private $guest = false,
+    ) {
     }
 
-    /**
-     * @deprecated 2.9.0 to be removed in 3.0; support for $isGuest public property
-     *
-     * @param $name
-     */
-    public function __get($name)
-    {
-        if ('isGuest' === $name) {
-            @trigger_error('$isGuest is deprecated as of 2.9.0; use construct and isGuest() instead', E_USER_DEPRECATED);
-
-            return $this->guest;
-        }
-    }
-
-    /**
-     * @param ORM\ClassMetadata $metadata
-     */
-    public static function loadMetadata(ORM\ClassMetadata $metadata)
+    public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
 
         $builder->setTable('users')
-            ->setCustomRepositoryClass('Mautic\UserBundle\Entity\UserRepository');
+            ->setCustomRepositoryClass(UserRepository::class);
 
         $builder->addId();
 
         $builder->createField('username', 'string')
-            ->length(255)
+            ->length(191)
             ->unique()
             ->build();
 
@@ -177,21 +175,21 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
 
         $builder->createField('firstName', 'string')
             ->columnName('first_name')
-            ->length(255)
+            ->length(191)
             ->build();
 
         $builder->createField('lastName', 'string')
             ->columnName('last_name')
-            ->length(255)
+            ->length(191)
             ->build();
 
         $builder->createField('email', 'string')
-            ->length(255)
+            ->length(191)
             ->unique()
             ->build();
 
         $builder->createField('position', 'string')
-            ->length(255)
+            ->length(191)
             ->nullable()
             ->build();
 
@@ -219,11 +217,6 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
             ->nullable()
             ->build();
 
-        $builder->createField('onlineStatus', 'string')
-            ->columnName('online_status')
-            ->nullable()
-            ->build();
-
         $builder->createField('preferences', 'array')
             ->nullable()
             ->build();
@@ -233,10 +226,7 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
             ->build();
     }
 
-    /**
-     * @param ClassMetadata $metadata
-     */
-    public static function loadValidatorMetadata(ClassMetadata $metadata)
+    public static function loadValidatorMetadata(ClassMetadata $metadata): void
     {
         $metadata->addPropertyConstraint('username', new Assert\NotBlank(
             ['message' => 'mautic.user.user.username.notblank']
@@ -277,6 +267,13 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
             ]
         ));
 
+        $metadata->addPropertyConstraint('position', new Assert\Length(
+            [
+                'max'        => 191,
+                'maxMessage' => 'mautic.user.user.position.toolong',
+            ]
+        ));
+
         $metadata->addPropertyConstraint('role', new Assert\NotBlank(
             ['message' => 'mautic.user.user.role.notblank']
         ));
@@ -284,7 +281,7 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
         $metadata->addPropertyConstraint('plainPassword', new Assert\NotBlank(
             [
                 'message' => 'mautic.user.user.password.notblank',
-                'groups'  => ['CheckPassword'],
+                'groups'  => ['CheckPasswordNotBlank'],
             ]
         ));
 
@@ -296,22 +293,29 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
             ]
         ));
 
+        $metadata->addPropertyConstraint('plainPassword', new NotWeak(
+            [
+                'message'    => 'mautic.user.user.password.weak',
+                'groups'     => ['CheckPassword'],
+            ]
+        ));
+
         $metadata->setGroupSequence(['User', 'SecondPass', 'CheckPassword']);
     }
 
-    /**
-     * @param Form $form
-     *
-     * @return array
-     */
-    public static function determineValidationGroups(Form $form)
+    public static function determineValidationGroups(Form $form): array
     {
         $data   = $form->getData();
         $groups = ['User', 'SecondPass'];
+        if ($data instanceof User) {
+            $isNewUser        = !$data->getId();
+            $hasPlainPassword = !empty($data->getPlainPassword());
 
-        //check if creating a new user or editing an existing user and the password has been updated
-        if (!$data->getId() || ($data->getId() && $data->getPlainPassword())) {
-            $groups[] = 'CheckPassword';
+            if ($isNewUser) {
+                $groups[] = $hasPlainPassword ? 'CheckPassword' : 'CheckPasswordNotBlank';
+            } elseif ($hasPlainPassword) {
+                $groups[] = 'CheckPassword';
+            }
         }
 
         return $groups;
@@ -319,10 +323,8 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
 
     /**
      * Prepares the metadata for API usage.
-     *
-     * @param $metadata
      */
-    public static function loadApiMetadata(ApiMetadataDriver $metadata)
+    public static function loadApiMetadata(ApiMetadataDriver $metadata): void
     {
         $metadata->setGroupPrefix('user')
             ->addListProperties(
@@ -342,21 +344,17 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
                     'locale',
                     'lastLogin',
                     'lastActive',
-                    'onlineStatus',
                     'signature',
                 ]
             )
             ->build();
     }
 
-    /**
-     * {@inheritdoc}
-     */
     protected function isChanged($prop, $val)
     {
         $getter  = 'get'.ucfirst($prop);
         $current = $this->$getter();
-        if ($prop == 'role') {
+        if ('role' == $prop) {
             if ($current && !$val) {
                 $this->changes['role'] = [$current->getName().' ('.$current->getId().')', $val];
             } elseif (!$this->role && $val) {
@@ -372,27 +370,23 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
         }
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getUsername()
+    public function getUsername(): ?string
     {
         return $this->username;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getSalt()
+    public function getUserIdentifier(): string
     {
-        //bcrypt generates its own salt
+        return $this->username ?? '';
+    }
+
+    public function getSalt(): ?string
+    {
+        // bcrypt generates its own salt
         return null;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getPassword()
+    public function getPassword(): ?string
     {
         return $this->password;
     }
@@ -400,7 +394,7 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     /**
      * Get plain password.
      *
-     * @return string
+     * @return ?string
      */
     public function getPlainPassword()
     {
@@ -410,23 +404,20 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     /**
      * Get current password (that a user has typed into a form).
      *
-     * @return string
+     * @return ?string
      */
     public function getCurrentPassword()
     {
         return $this->currentPassword;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getRoles()
+    public function getRoles(): array
     {
         $roles = [];
 
         if ($this->username) {
             $roles = [
-                (($this->isAdmin()) ? 'ROLE_ADMIN' : 'ROLE_USER'),
+                ($this->isAdmin()) ? 'ROLE_ADMIN' : 'ROLE_USER',
             ];
 
             if (defined('MAUTIC_API_REQUEST') && MAUTIC_API_REQUEST) {
@@ -437,44 +428,43 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
         return $roles;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function eraseCredentials()
+    #[\Deprecated]
+    public function eraseCredentials(): void
     {
     }
 
     /**
-     * {@inheritdoc}
+     * @return array<int, mixed>
      */
-    public function serialize()
+    public function __serialize(): array
     {
-        return serialize([
+        $this->plainPassword   = null;
+        $this->currentPassword = null;
+
+        return [
             $this->id,
             $this->username,
             $this->password,
             $this->isPublished(),
-        ]);
+        ];
     }
 
     /**
-     * {@inheritdoc}
+     * @param array<int, mixed> $data
      */
-    public function unserialize($serialized)
+    public function __unserialize(array $data): void
     {
-        list(
+        [
             $this->id,
             $this->username,
             $this->password,
-            $published
-            ) = Serializer::decode($serialized);
+            $published,
+        ] = $data;
         $this->setIsPublished($published);
     }
 
     /**
-     * Get id.
-     *
-     * @return int
+     * @return ?int
      */
     public function getId()
     {
@@ -513,8 +503,6 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     /**
      * Set plain password.
      *
-     * @param $plainPassword
-     *
      * @return User
      */
     public function setPlainPassword($plainPassword)
@@ -526,8 +514,6 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
 
     /**
      * Set current password.
-     *
-     * @param $currentPassword
      *
      * @return User
      */
@@ -592,10 +578,8 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
      * Get full name.
      *
      * @param bool $lastFirst
-     *
-     * @return string
      */
-    public function getName($lastFirst = false)
+    public function getName($lastFirst = false): string
     {
         return ($lastFirst) ? $this->lastName.', '.$this->firstName : $this->firstName.' '.$this->lastName;
     }
@@ -626,45 +610,11 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     }
 
     /**
-     * {@inheritdoc}
-     */
-    public function isAccountNonExpired()
-    {
-        return true;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function isAccountNonLocked()
-    {
-        return true;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function isCredentialsNonExpired()
-    {
-        return true;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function isEnabled()
-    {
-        return $this->isPublished();
-    }
-
-    /**
      * Set role.
-     *
-     * @param Role $role
      *
      * @return User
      */
-    public function setRole(Role $role = null)
+    public function setRole(?Role $role = null)
     {
         $this->isChanged('role', $role);
         $this->role = $role;
@@ -684,8 +634,6 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
 
     /**
      * Set active permissions.
-     *
-     * @param array $permissions
      *
      * @return User
      */
@@ -757,13 +705,9 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     }
 
     /**
-     * Set locale.
-     *
-     * @param string $locale
-     *
      * @return User
      */
-    public function setLocale($locale)
+    public function setLocale(?string $locale)
     {
         $this->isChanged('locale', $locale);
         $this->locale = $locale;
@@ -788,7 +732,7 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
      */
     public function isAdmin()
     {
-        if ($this->role !== null) {
+        if (null !== $this->role) {
             return $this->role->isAdmin();
         } else {
             return false;
@@ -806,7 +750,7 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     /**
      * @param mixed $lastLogin
      */
-    public function setLastLogin($lastLogin = null)
+    public function setLastLogin($lastLogin = null): void
     {
         if (empty($lastLogin)) {
             $lastLogin = new \DateTime();
@@ -825,28 +769,12 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     /**
      * @param mixed $lastActive
      */
-    public function setLastActive($lastActive = null)
+    public function setLastActive($lastActive = null): void
     {
         if (empty($lastActive)) {
             $lastActive = new \DateTime();
         }
         $this->lastActive = $lastActive;
-    }
-
-    /**
-     * @return mixed
-     */
-    public function getOnlineStatus()
-    {
-        return $this->onlineStatus;
-    }
-
-    /**
-     * @param mixed $status
-     */
-    public function setOnlineStatus($status)
-    {
-        $this->onlineStatus = $status;
     }
 
     /**
@@ -860,7 +788,7 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     /**
      * @param mixed $preferences
      */
-    public function setPreferences(array $preferences)
+    public function setPreferences(array $preferences): void
     {
         $this->preferences = $preferences;
     }
@@ -891,14 +819,16 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     }
 
     /**
-     * @param UserInterface $user
-     *
-     * Needed for SAML to work correctly
+     * Needed for SAML to work correctly.
      */
-    public function isEqualTo(UserInterface $user)
+    public function isEqualTo(UserInterface $user): bool
     {
-        $thisUser = $this->getId().$this->getUsername().$this->getPassword();
-        $thatUser = $user->getId().$user->getUsername().$user->getPassword();
+        if (!$user instanceof self) {
+            return false;
+        }
+
+        $thisUser = $this->getId().$this->getUserIdentifier().$this->getPassword();
+        $thatUser = $user->getId().$user->getUserIdentifier().$user->getPassword();
 
         return $thisUser === $thatUser;
     }
@@ -909,5 +839,10 @@ class User extends FormEntity implements AdvancedUserInterface, \Serializable, E
     public function isGuest()
     {
         return $this->guest;
+    }
+
+    public function getCacheNamespacesToDelete(): array
+    {
+        return [self::CACHE_NAMESPACE];
     }
 }

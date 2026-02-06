@@ -1,113 +1,68 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CoreBundle\Helper;
 
-use Joomla\Http\Http;
-use Monolog\Logger;
+use GuzzleHttp\Psr7\Query;
 
-/**
- * Class UrlHelper.
- */
 class UrlHelper
 {
     /**
-     * @var Http
-     */
-    protected $http;
-
-    /**
-     * @var string
-     */
-    protected $shortnerServiceUrl;
-
-    /**
-     * @var Logger
-     */
-    protected $logger;
-
-    /**
-     * UrlHelper constructor.
+     * Append query string to URL.
      *
-     * @param Http|null   $http
-     * @param null        $shortnerServiceUrl
-     * @param Logger|null $logger
+     * @param string $url
+     * @param string $appendQueryString
+     *
+     * @return string
      */
-    public function __construct(Http $http = null, $shortnerServiceUrl = null, Logger $logger = null)
+    public static function appendQueryToUrl($url, $appendQueryString)
     {
-        $this->http               = $http;
-        $this->shortnerServiceUrl = $shortnerServiceUrl;
-    }
+        $query     = parse_url($url, PHP_URL_QUERY);
 
-    /**
-     * Shorten a URL.
-     *
-     * @param $url
-     *
-     * @return mixed
-     */
-    public function buildShortUrl($url)
-    {
-        if (!$this->shortnerServiceUrl) {
-            return $url;
+        if ($query) {
+            $appendQueryString = '&'.$appendQueryString;
+        } else {
+            $appendQueryString = '?'.$appendQueryString;
         }
 
-        try {
-            $response = $this->http->get($this->shortnerServiceUrl.urlencode($url));
+        $anchorParts = explode('#', $url);
+        // join url without anchor + $appendQueryString
+        $url = $anchorParts[0].$appendQueryString;
+        // prevent & or ? twice
+        $url = str_replace(['&&', '??'], ['&', '?'], $url);
 
-            if ($response->code === 200) {
-                return rtrim($response->body);
-            } elseif ($this->logger) {
-                $this->logger->addWarning("Url shortner failed with code {$response->code}: {$response->body}");
-            }
-        } catch (\Exception $exception) {
-            if ($this->logger) {
-                $this->logger->addError(
-                    $exception->getMessage(),
-                    ['exception' => $exception]
-                );
-            }
+        // anchor
+        if (isset($anchorParts[1])) {
+            $url = sprintf('%s#%s', $url, $anchorParts[1]);
         }
 
         return $url;
     }
 
     /**
-     * @param $rel
-     *
      * @return string
      */
     public static function rel2abs($rel)
     {
         $path = $host = $scheme = '';
 
-        $ssl    = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on';
+        $ssl    = !empty($_SERVER['HTTPS']) && 'on' == $_SERVER['HTTPS'];
         $scheme = strtolower($_SERVER['SERVER_PROTOCOL']);
         $scheme = substr($scheme, 0, strpos($scheme, '/')).($ssl ? 's' : '');
         $port   = $_SERVER['SERVER_PORT'];
-        $port   = ((!$ssl && $port == '80') || ($ssl && $port == '443')) ? '' : ":$port";
-        $host   = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : null;
-        $host   = isset($host) ? $host : $_SERVER['SERVER_NAME'].$port;
+        $port   = ((!$ssl && '80' == $port) || ($ssl && '443' == $port)) ? '' : ":$port";
+        $host   = $_SERVER['HTTP_HOST'] ?? null;
+        $host ??= $_SERVER['SERVER_NAME'].$port;
         $base   = "$scheme://$host".$_SERVER['REQUEST_URI'];
 
-        $base = str_replace('/index_dev.php', '', $base);
         $base = str_replace('/index.php', '', $base);
 
         /* return if already absolute URL */
-        if (parse_url($rel, PHP_URL_SCHEME) != '') {
+        if ('' != parse_url($rel, PHP_URL_SCHEME)) {
             return $rel;
         }
 
         /* queries and anchors */
-        if ($rel[0] == '#' || $rel[0] == '?') {
+        if ('#' == $rel[0] || '?' == $rel[0]) {
             return $base.$rel;
         }
 
@@ -116,7 +71,7 @@ class UrlHelper
         $urlPartsArray = parse_url($base);
 
         // We should have a valid URL by this point. If not, just return the original value
-        if ($urlPartsArray === false) {
+        if (false === $urlPartsArray) {
             return $rel;
         }
 
@@ -126,19 +81,20 @@ class UrlHelper
         $path = preg_replace('#/[^/]*$#', '', $path);
 
         /* destroy path if relative url points to root */
-        if ($rel[0] == '/') {
+        if ('/' == $rel[0]) {
             $path = '';
         }
 
         /* dirty absolute URL // with port number if exists */
-        if (parse_url($base, PHP_URL_PORT) != '') {
+        if ('' != parse_url($base, PHP_URL_PORT)) {
             $abs = "$host:".parse_url($base, PHP_URL_PORT)."$path/$rel";
         } else {
             $abs = "$host$path/$rel";
         }
         /* replace '//' or '/./' or '/foo/../' with '/' */
         $re = ['#(/\.?/)#', '#/(?!\.\.)[^/]+/\.\./#'];
-        for ($n = 1; $n > 0; $abs = preg_replace($re, '/', $abs, -1, $n)) {
+        for ($n = 1; $n > 0;) {
+            $abs = preg_replace($re, '/', $abs, -1, $n);
         }
 
         /* absolute URL is ready! */
@@ -150,16 +106,13 @@ class UrlHelper
      * With exception of URLs used as a token default values.
      *
      * @param string $text
-     * @param array  $contactUrlFields
-     *
-     * @return array
      */
-    public static function getUrlsFromPlaintext($text, array $contactUrlFields = [])
+    public static function getUrlsFromPlaintext($text, array $contactUrlFields = []): array
     {
         $urls = [];
         // Check if there are any tokens that URL based fields
         foreach ($contactUrlFields as $field) {
-            if (strpos($text, "{contactfield=$field}") !== false) {
+            if (str_contains($text, "{contactfield=$field}")) {
                 $urls[] = "{contactfield=$field}";
             }
         }
@@ -204,9 +157,9 @@ class UrlHelper
         }
 
         $url = self::sanitizeUrlScheme($url);
-        $url = self::sanitizeUrlQuery($url);
+        $url = self::sanitizeUrlPath($url);
 
-        return $url;
+        return self::sanitizeUrlQuery($url);
     }
 
     /**
@@ -218,13 +171,19 @@ class UrlHelper
      */
     private static function sanitizeUrlScheme($url)
     {
-        $isRelative = strpos($url, '//') === 0;
+        $isRelative = str_starts_with($url, '//');
 
         if ($isRelative) {
             return $url;
         }
 
-        $containSlashes = strpos($url, '://') !== false;
+        $isMailto = str_starts_with($url, 'mailto:');
+
+        if ($isMailto) {
+            return $url;
+        }
+
+        $containSlashes = str_contains($url, '://');
 
         if (!$containSlashes) {
             $url = sprintf('://%s', $url);
@@ -245,16 +204,44 @@ class UrlHelper
      *
      * @return string
      */
+    private static function sanitizeUrlPath($url)
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+
+        if (!empty($path)) {
+            $sanitizedPath = str_replace(' ', '%20', $path);
+            $url           = str_replace($path, $sanitizedPath, $url);
+        }
+
+        return $url;
+    }
+
+    /**
+     * @param string $url
+     *
+     * @return string
+     */
     private static function sanitizeUrlQuery($url)
     {
         $query = parse_url($url, PHP_URL_QUERY);
 
         if (!empty($query)) {
-            parse_str($query, $parsedQuery);
+            $parsedQuery = Query::parse($query);
 
             if ($parsedQuery) {
-                $encodedQuery = http_build_query($parsedQuery);
-                $url          = str_replace($query, $encodedQuery, $url);
+                $queryItems = [];
+
+                // Remove duplicate query parameters from query.
+                foreach ($parsedQuery as $index => $item) {
+                    if (is_array($item) && !str_ends_with($index, '[]')) {
+                        $item = array_last($item);
+                    }
+
+                    $queryItems[$index] = $item;
+                }
+
+                $encodedQuery = Query::build($queryItems, PHP_QUERY_RFC3986);
+                $url          = str_replace('?'.$query, '?'.$encodedQuery, $url);
             }
         }
 
@@ -269,7 +256,7 @@ class UrlHelper
     private static function removeTrailingNonAlphaNumeric($string)
     {
         // Special handling of closing bracket
-        if (substr($string, -1) === '}' && preg_match('/^[^{\r\n]*\}.*?$/', $string)) {
+        if (str_ends_with($string, '}') && preg_match('/^[^{\r\n]*\}.*?$/', $string)) {
             $string = substr($string, 0, -1);
 
             return self::removeTrailingNonAlphaNumeric($string);
@@ -283,5 +270,64 @@ class UrlHelper
         }
 
         return $string;
+    }
+
+    /**
+     *  This method return true with special characters in URL, for example https://domain.tld/é.pdf
+     * filter_var($url, FILTER_VALIDATE_URL) allow only alphanumerics [0-9a-zA-Z], the special characters "$-_.+!*'()," [not including the quotes - ed].
+     *
+     * @param string $url
+     */
+    public static function isValidUrl($url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        if (null !== $path) {
+            $encodedPath = array_map('urlencode', explode('/', $path));
+            $url         = str_replace($path, implode('/', $encodedPath), $url);
+        }
+
+        return (bool) filter_var($url, FILTER_VALIDATE_URL);
+    }
+
+    /**
+     * Decode &amp; (HTML), &#38; (decimal) and &#x26; (hex) ampersands.
+     * This even works with double encoded ampersands.
+     *
+     * @param string $url
+     *
+     * @return string
+     */
+    public static function decodeAmpersands($url)
+    {
+        while (str_contains($url, '&amp;') || str_contains($url, '&#38;') || str_contains($url, '&#x26;')) {
+            $url = str_replace(['&amp;', '&#38;', '&#x26;'], '&', $url);
+        }
+
+        return $url;
+    }
+
+    /**
+     * This method implements unicode slugs instead of transliteration.
+     */
+    public static function stringURLUnicodeSlug(string $string): string
+    {
+        // Replace double byte whitespaces by single byte (East Asian languages)
+        $str = preg_replace('/\xE3\x80\x80/', ' ', $string);
+
+        // Remove any '-' from the string as they will be used as concatenator.
+        // Would be great to let the spaces in but only Firefox is friendly with this
+        $str = str_replace('-', ' ', $str);
+
+        // Replace forbidden characters by whitespaces
+        $str = preg_replace('#[:\#\*"@+=;!><&\.%()\]\/\'\\\\|\[]#', "\x20", $str);
+
+        // Delete all '?'
+        $str = str_replace('?', '', $str);
+
+        // Trim white spaces at beginning and end of alias and make lowercase
+        $str = trim(strtolower($str));
+
+        // Remove any duplicate whitespace and replace whitespaces by hyphens
+        return preg_replace('#\x20+#', '-', $str);
     }
 }

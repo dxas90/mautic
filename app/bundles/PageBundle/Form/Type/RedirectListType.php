@@ -2,61 +2,43 @@
 
 namespace Mautic\PageBundle\Form\Type;
 
-use Mautic\CoreBundle\Factory\MauticFactory;
 use Symfony\Component\Form\AbstractType;
-use Symfony\Component\OptionsResolver\OptionsResolverInterface;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
- * Class RedirectListType.
+ * @extends AbstractType<array<mixed>>
  */
 class RedirectListType extends AbstractType
 {
-    private $factory;
-
-    /**
-     * @param MauticFactory $factory
-     */
-    public function __construct(MauticFactory $factory)
+    public function configureOptions(OptionsResolver $resolver): void
     {
-        $this->factory = $factory;
-    }
+        $choices = [
+            'mautic.page.form.redirecttype.permanent'     => Response::HTTP_MOVED_PERMANENTLY,
+            'mautic.page.form.redirecttype.temporary'     => Response::HTTP_FOUND,
+            'mautic.page.form.redirecttype.303_temporary' => Response::HTTP_SEE_OTHER,
+            'mautic.page.form.redirecttype.307_temporary' => Response::HTTP_TEMPORARY_REDIRECT,
+            'mautic.page.form.redirecttype.308_permanent' => Response::HTTP_PERMANENTLY_REDIRECT,
+        ];
 
-    /**
-     * @param OptionsResolverInterface $resolver
-     */
-    public function setDefaultOptions(OptionsResolverInterface $resolver)
-    {
-        $factory = $this->factory;
         $resolver->setDefaults([
-            'choices'     => $factory->getParameter('redirect_list_types'),
+            'choices'     => $choices,
             'expanded'    => false,
             'multiple'    => false,
             'label'       => 'mautic.page.form.redirecttype',
             'label_attr'  => ['class' => 'control-label'],
-            'empty_value' => false,
+            'placeholder' => false,
             'required'    => false,
-            'attr'        => [
-                'class' => 'form-control',
-            ],
-            'feature' => 'all',
+            'attr'        => ['class' => 'form-control'],
+            'feature'     => 'all',
         ]);
 
-        $resolver->setOptional(['feature']);
+        $resolver->setDefined(['feature']);
     }
 
-    /**
-     * @return string
-     */
-    public function getName()
+    public function getParent(): ?string
     {
-        return 'redirect_list';
-    }
-
-    /**
-     * @return string
-     */
-    public function getParent()
-    {
-        return 'choice';
+        return ChoiceType::class;
     }
 }

@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ReportBundle\Model;
 
 use Doctrine\ORM\EntityManager;
@@ -23,26 +14,32 @@ class ScheduleModel
     /**
      * @var SchedulerRepository
      */
-    private $schedulerRepository;
+    private \Doctrine\ORM\EntityRepository $schedulerRepository;
 
-    /**
-     * @var SchedulerPlanner
-     */
-    private $schedulerPlanner;
-
-    public function __construct(EntityManager $entityManager, SchedulerPlanner $schedulerPlanner)
-    {
+    public function __construct(
+        private EntityManager $entityManager,
+        private SchedulerPlanner $schedulerPlanner,
+    ) {
         $this->schedulerRepository = $entityManager->getRepository(Scheduler::class);
-        $this->schedulerPlanner    = $schedulerPlanner;
     }
 
+    /**
+     * @return Scheduler[]
+     */
     public function getScheduledReportsForExport(ExportOption $exportOption)
     {
         return $this->schedulerRepository->getScheduledReportsForExport($exportOption);
     }
 
-    public function reportWasScheduled(Report $report)
+    public function reportWasScheduled(Report $report): void
     {
         $this->schedulerPlanner->computeScheduler($report);
+    }
+
+    public function turnOffScheduler(Report $report): void
+    {
+        $report->setIsScheduled(false);
+        $this->entityManager->persist($report);
+        $this->entityManager->flush();
     }
 }

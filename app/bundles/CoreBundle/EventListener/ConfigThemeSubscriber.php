@@ -1,44 +1,37 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CoreBundle\EventListener;
 
 use Mautic\ConfigBundle\ConfigEvents;
 use Mautic\ConfigBundle\Event\ConfigBuilderEvent;
+use Mautic\CoreBundle\Form\Type\ConfigThemeType;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
-/**
- * Class ConfigSubscriber.
- */
-class ConfigThemeSubscriber extends CommonSubscriber
+class ConfigThemeSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             ConfigEvents::CONFIG_ON_GENERATE => ['onConfigGenerate', 0],
         ];
     }
 
-    public function onConfigGenerate(ConfigBuilderEvent $event)
+    public function onConfigGenerate(ConfigBuilderEvent $event): void
     {
-        $event->addForm([
-            'bundle'     => 'CoreBundle',
-            'formAlias'  => 'themeconfig',
-            'formTheme'  => 'MauticCoreBundle:FormTheme\Config',
-            'parameters' => [
+        $event->addForm(
+            [
+                'bundle'     => 'CoreBundle',
+                'formAlias'  => 'themeconfig',
+                'formType'   => ConfigThemeType::class,
+                'formTheme'  => '@MauticCore/FormTheme/Config/_config_themeconfig_widget.html.twig',
+                'parameters' => [
                     'theme'                           => $event->getParametersFromConfig('MauticCoreBundle')['theme'],
                     'theme_import_allowed_extensions' => $event->getParametersFromConfig('MauticCoreBundle')['theme_import_allowed_extensions'],
+                    'brand_name'                      => $event->getParametersFromConfig('MauticCoreBundle')['brand_name'] ?? '',
+                    'primary_brand_color'             => $event->getParametersFromConfig('MauticCoreBundle')['primary_brand_color'] ?? '000000',
+                    'rounded_corners'                 => $event->getParametersFromConfig('MauticCoreBundle')['rounded_corners'] ?? '0',
                 ],
-        ]);
+            ]
+        );
     }
 }

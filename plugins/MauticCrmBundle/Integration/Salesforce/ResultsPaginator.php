@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace MauticPlugin\MauticCrmBundle\Integration\Salesforce;
 
 use Mautic\PluginBundle\Exception\ApiErrorException;
@@ -16,11 +7,6 @@ use Psr\Log\LoggerInterface;
 
 class ResultsPaginator
 {
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-
     /**
      * @var array
      */
@@ -31,41 +17,25 @@ class ResultsPaginator
      */
     private $totalRecords = 0;
 
-    /**
-     * @var int
-     */
-    private $recordCount = 0;
+    private int $recordCount = 0;
+
+    private int $retryCount = 0;
 
     /**
-     * @var
-     */
-    private $retryCount = 0;
-
-    /**
-     * @var
+     * @var string|null
      */
     private $nextRecordsUrl;
 
     /**
-     * @var string
+     * @param string $salesforceBaseUrl
      */
-    private $salesforceBaseUrl;
-
-    /**
-     * ResultsPaginator constructor.
-     *
-     * @param LoggerInterface $logger
-     * @param string          $salesforceBaseUrl
-     */
-    public function __construct(LoggerInterface $logger, $salesforceBaseUrl)
-    {
-        $this->logger            = $logger;
-        $this->salesforceBaseUrl = $salesforceBaseUrl;
+    public function __construct(
+        private LoggerInterface $logger,
+        private $salesforceBaseUrl,
+    ) {
     }
 
     /**
-     * @param array $results
-     *
      * @return $this
      *
      * @throws ApiErrorException
@@ -94,7 +64,7 @@ class ResultsPaginator
             $this->retryCount     = 0;
             $this->nextRecordsUrl = $this->results['nextRecordsUrl'];
 
-            if (strpos($this->nextRecordsUrl, $this->salesforceBaseUrl) === false) {
+            if (!str_contains($this->nextRecordsUrl, $this->salesforceBaseUrl)) {
                 $this->nextRecordsUrl = $this->salesforceBaseUrl.$this->nextRecordsUrl;
             }
 
@@ -122,10 +92,7 @@ class ResultsPaginator
         return '';
     }
 
-    /**
-     * @return int
-     */
-    public function getTotal()
+    public function getTotal(): int
     {
         return (int) $this->totalRecords;
     }

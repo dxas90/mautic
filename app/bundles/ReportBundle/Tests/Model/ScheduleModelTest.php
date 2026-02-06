@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2016 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ReportBundle\Tests\Model;
 
 use Doctrine\ORM\EntityManager;
@@ -18,68 +9,82 @@ use Mautic\ReportBundle\Entity\SchedulerRepository;
 use Mautic\ReportBundle\Model\ScheduleModel;
 use Mautic\ReportBundle\Scheduler\Model\SchedulerPlanner;
 use Mautic\ReportBundle\Scheduler\Option\ExportOption;
+use PHPUnit\Framework\MockObject\MockObject;
 
-class ScheduleModelTest extends \PHPUnit_Framework_TestCase
+class ScheduleModelTest extends \PHPUnit\Framework\TestCase
 {
-    public function testGetScheduledReportsForExport()
+    /**
+     * @var MockObject|SchedulerRepository
+     */
+    private MockObject $schedulerRepository;
+
+    /**
+     * @var MockObject|EntityManager
+     */
+    private MockObject $entityManager;
+
+    /**
+     * @var MockObject|SchedulerPlanner
+     */
+    private MockObject $schedulerPlanner;
+
+    /**
+     * @var MockObject|ExportOption
+     */
+    private MockObject $exportOption;
+
+    private ScheduleModel $scheduleModel;
+
+    protected function setUp(): void
     {
-        $schedulerRepository = $this->getMockBuilder(SchedulerRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->schedulerRepository = $this->createMock(SchedulerRepository::class);
+        $this->entityManager       = $this->createMock(EntityManager::class);
+        $this->schedulerPlanner    = $this->createMock(SchedulerPlanner::class);
+        $this->exportOption        = $this->createMock(ExportOption::class);
 
-        $entityManager = $this->getMockBuilder(EntityManager::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $schedulerPlanner = $this->getMockBuilder(SchedulerPlanner::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $exportOption = $this->getMockBuilder(ExportOption::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $entityManager->expects($this->once())
+        $this->entityManager->expects($this->once())
             ->method('getRepository')
             ->with(Scheduler::class)
-            ->willReturn($schedulerRepository);
+            ->willReturn($this->schedulerRepository);
 
-        $schedulerRepository->expects($this->once())
-            ->method('getScheduledReportsForExport')
-            ->with($exportOption);
-
-        $scheduleModel = new ScheduleModel($entityManager, $schedulerPlanner);
-
-        $scheduleModel->getScheduledReportsForExport($exportOption);
+        $this->scheduleModel = new ScheduleModel($this->entityManager, $this->schedulerPlanner);
     }
 
-    public function testReportWasScheduled()
+    public function testGetScheduledReportsForExport(): void
     {
-        $schedulerRepository = $this->getMockBuilder(SchedulerRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->schedulerRepository->expects($this->once())
+            ->method('getScheduledReportsForExport')
+            ->with($this->exportOption);
 
-        $entityManager = $this->getMockBuilder(EntityManager::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->scheduleModel->getScheduledReportsForExport($this->exportOption);
+    }
 
-        $schedulerPlanner = $this->getMockBuilder(SchedulerPlanner::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $entityManager->expects($this->once())
-            ->method('getRepository')
-            ->with(Scheduler::class)
-            ->willReturn($schedulerRepository);
-
+    public function testReportWasScheduled(): void
+    {
         $report = new Report();
 
-        $schedulerPlanner->expects($this->once())
+        $this->schedulerPlanner->expects($this->once())
             ->method('computeScheduler')
             ->with($report);
 
-        $scheduleModel = new ScheduleModel($entityManager, $schedulerPlanner);
+        $this->scheduleModel->reportWasScheduled($report);
+    }
 
-        $scheduleModel->reportWasScheduled($report);
+    public function testTurnOffScheduler(): void
+    {
+        $report = new Report();
+
+        $report->setIsScheduled(true);
+
+        $this->entityManager->expects($this->once())
+            ->method('persist')
+            ->with($report);
+
+        $this->entityManager->expects($this->once())
+            ->method('flush');
+
+        $this->scheduleModel->turnOffScheduler($report);
+
+        $this->assertFalse($report->isScheduled());
     }
 }

@@ -1,83 +1,52 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CategoryBundle\EventListener;
 
 use Mautic\CategoryBundle\CategoryEvents;
-use Mautic\CategoryBundle\Event as Events;
+use Mautic\CategoryBundle\Event\CategoryEvent;
+use Mautic\CategoryBundle\Event\CategoryTypeEntityEvent;
 use Mautic\CategoryBundle\Event\CategoryTypesEvent;
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
+use Mautic\CategoryBundle\Model\CategoryModel;
+use Mautic\CoreBundle\Exception\RecordCanNotBeDeletedException;
 use Mautic\CoreBundle\Helper\BundleHelper;
 use Mautic\CoreBundle\Helper\IpLookupHelper;
 use Mautic\CoreBundle\Model\AuditLogModel;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
-/**
- * Class CategorySubscriber.
- */
-class CategorySubscriber extends CommonSubscriber
+class CategorySubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var BundleHelper
-     */
-    protected $bundleHelper;
-
-    /**
-     * @var IpLookupHelper
-     */
-    protected $ipLookupHelper;
-
-    /**
-     * @var AuditLogModel
-     */
-    protected $auditLogModel;
-
-    /**
-     * CategorySubscriber constructor.
-     *
-     * @param BundleHelper   $bundleHelper
-     * @param IpLookupHelper $ipLookupHelper
-     * @param AuditLogModel  $auditLogModel
-     */
-    public function __construct(BundleHelper $bundleHelper, IpLookupHelper $ipLookupHelper, AuditLogModel $auditLogModel)
-    {
-        $this->bundleHelper   = $bundleHelper;
-        $this->ipLookupHelper = $ipLookupHelper;
-        $this->auditLogModel  = $auditLogModel;
+    public function __construct(
+        private BundleHelper $bundleHelper,
+        private IpLookupHelper $ipLookupHelper,
+        private AuditLogModel $auditLogModel,
+        private CategoryModel $categoryModel,
+        private TranslatorInterface $translator,
+    ) {
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             CategoryEvents::CATEGORY_ON_BUNDLE_LIST_BUILD => ['onCategoryBundleListBuild', 0],
             CategoryEvents::CATEGORY_POST_SAVE            => ['onCategoryPostSave', 0],
             CategoryEvents::CATEGORY_POST_DELETE          => ['onCategoryDelete', 0],
+            CategoryEvents::CATEGORY_PRE_DELETE           => ['onCategoryPreDelete', 0],
+            CategoryTypeEntityEvent::class                => ['onCategoryTypeEntity', 0],
         ];
     }
 
     /**
      * Add bundle to the category.
-     *
-     * @param CategoryTypesEvent $event
      */
-    public function onCategoryBundleListBuild(CategoryTypesEvent $event)
+    public function onCategoryBundleListBuild(CategoryTypesEvent $event): void
     {
         $bundles = $this->bundleHelper->getMauticBundles(true);
 
         foreach ($bundles as $bundle) {
             if (!empty($bundle['config']['categories'])) {
-                foreach ($bundle['config']['categories'] as $type => $label) {
-                    $event->addCategoryType($type, $label);
+                foreach ($bundle['config']['categories'] as $type => $data) {
+                    $event->addCategoryType($type, $data['label'] ?? null);
                 }
             }
         }
@@ -85,10 +54,8 @@ class CategorySubscriber extends CommonSubscriber
 
     /**
      * Add an entry to the audit log.
-     *
-     * @param Events\CategoryEvent $event
      */
-    public function onCategoryPostSave(Events\CategoryEvent $event)
+    public function onCategoryPostSave(CategoryEvent $event): void
     {
         $category = $event->getCategory();
         if ($details = $event->getChanges()) {
@@ -106,10 +73,8 @@ class CategorySubscriber extends CommonSubscriber
 
     /**
      * Add a delete entry to the audit log.
-     *
-     * @param Events\CategoryEvent $event
      */
-    public function onCategoryDelete(Events\CategoryEvent $event)
+    public function onCategoryDelete(CategoryEvent $event): void
     {
         $category = $event->getCategory();
         $log      = [
@@ -121,5 +86,32 @@ class CategorySubscriber extends CommonSubscriber
             'ipAddress' => $this->ipLookupHelper->getIpAddressFromRequest(),
         ];
         $this->auditLogModel->writeToLog($log);
+    }
+
+    public function onCategoryPreDelete(CategoryEvent $event): void
+    {
+        if ($usage = $this->categoryModel->getUsage($event->getCategory())) {
+            $message = $this->translator->trans(
+                'mautic.category.is_in_use.delete',
+                [
+                    '%entities%'     => implode(', ', array_map(fn ($entity): string => $this->translator->trans($entity['label']).' Id: '.$entity['id'], $usage)),
+                    '%categoryName%' => $event->getCategory()->getTitle(),
+                ],
+                'validators');
+            throw new RecordCanNotBeDeletedException($message);
+        }
+    }
+
+    public function onCategoryTypeEntity(CategoryTypeEntityEvent $event): void
+    {
+        $bundles = $this->bundleHelper->getMauticBundles(true);
+
+        foreach ($bundles as $bundle) {
+            if (!empty($bundle['config']['categories'])) {
+                foreach ($bundle['config']['categories'] as $type => $data) {
+                    $event->addCategoryTypeEntity($type, $data);
+                }
+            }
+        }
     }
 }

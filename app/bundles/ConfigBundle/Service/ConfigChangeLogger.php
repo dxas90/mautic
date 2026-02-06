@@ -1,18 +1,10 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ConfigBundle\Service;
 
 use Mautic\CoreBundle\Helper\IpLookupHelper;
 use Mautic\CoreBundle\Model\AuditLogModel;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
  * Compare normalized for data and log changes.
@@ -22,42 +14,25 @@ class ConfigChangeLogger
     /**
      * Keys to remove from log.
      *
-     * @var array
+     * @var string[]
      */
-    private $filterKeys = [
+    private array $filterKeys = [
         'transifex_password',
-        'mailer_api_key',
         'mailer_is_owner',
     ];
 
     /**
-     * @var AuditLogModel
+     * @var mixed[]|null
      */
-    private $auditLogModel;
+    private ?array $originalNormData = null;
 
-    /**
-     * @var IpLookupHelper
-     */
-    private $ipLookupHelper;
-
-    /**
-     * @var array
-     */
-    private $originalNormData;
-
-    /**
-     * @param IpLookupHelper $ipLookupHelper
-     * @param AuditLogModel  $auditLogModel
-     */
-    public function __construct(IpLookupHelper $ipLookupHelper, AuditLogModel $auditLogModel)
-    {
-        $this->ipLookupHelper = $ipLookupHelper;
-        $this->auditLogModel  = $auditLogModel;
+    public function __construct(
+        private IpLookupHelper $ipLookupHelper,
+        private AuditLogModel $auditLogModel,
+    ) {
     }
 
     /**
-     * @param array $originalNormData
-     *
      * @return ConfigChangeLogger
      */
     public function setOriginalNormData(array $originalNormData)
@@ -72,12 +47,10 @@ class ConfigChangeLogger
      * Diff is based on form normalized data before and after post.
      *
      * @see Form::getNormData()
-     *
-     * @param array $postNormData
      */
-    public function log(array $postNormData)
+    public function log(array $postNormData): void
     {
-        if ($this->originalNormData === null) {
+        if (null === $this->originalNormData) {
             throw new \RuntimeException('Set original normalized data at first');
         }
 
@@ -87,6 +60,10 @@ class ConfigChangeLogger
         $diff = [];
         foreach ($postData as $key => $value) {
             if (array_key_exists($key, $originalData) && $originalData[$key] != $value) {
+                if ($value instanceof UploadedFile) {
+                    $value = $value->getFilename();
+                }
+
                 $diff[$key] = $value;
             }
         }
@@ -95,7 +72,7 @@ class ConfigChangeLogger
             return;
         }
 
-        $log     = [
+        $log = [
             'bundle'    => 'config',
             'object'    => 'config',
             'objectId'  => 0,
@@ -110,12 +87,8 @@ class ConfigChangeLogger
     /**
      * Some form data (AssetBundle) has 'parameters' inside array too.
      * Normalize all.
-     *
-     * @param array $data
-     *
-     * @return array
      */
-    private function normalizeData(array $data)
+    private function normalizeData(array $data): array
     {
         $key = 'parameters';
 
@@ -133,18 +106,12 @@ class ConfigChangeLogger
 
     /**
      * Filter unused keys from post data.
-     *
-     * @param array $data
-     *
-     * @return array
      */
-    private function filterData(array $data)
+    private function filterData(array $data): array
     {
         $keys = $this->filterKeys;
 
-        return array_filter($data, function ($key) use ($keys) {
-            return !in_array($key, $keys);
-        },
+        return array_filter($data, fn ($key): bool => !in_array($key, $keys),
             ARRAY_FILTER_USE_KEY);
     }
 }

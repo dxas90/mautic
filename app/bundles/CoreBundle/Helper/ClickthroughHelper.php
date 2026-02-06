@@ -1,26 +1,15 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CoreBundle\Helper;
+
+use Mautic\CoreBundle\Exception\InvalidDecodedStringException;
 
 class ClickthroughHelper
 {
     /**
      * Encode an array to append to a URL.
-     *
-     * @param array $array
-     *
-     * @return string
      */
-    public static function encodeArrayForUrl(array $array)
+    public static function encodeArrayForUrl(array $array): string
     {
         return urlencode(base64_encode(serialize($array)));
     }
@@ -28,7 +17,6 @@ class ClickthroughHelper
     /**
      * Decode a string appended to URL into an array.
      *
-     * @param      $string
      * @param bool $urlDecode
      *
      * @return array
@@ -42,10 +30,24 @@ class ClickthroughHelper
             return [];
         }
 
-        if (strpos(strtolower($decoded), 'a') !== 0) {
-            throw new \InvalidArgumentException(sprintf('The string %s is not a serialized array.', $decoded));
+        if (0 !== stripos($decoded, 'a')) {
+            throw new InvalidDecodedStringException($decoded);
         }
 
-        return Serializer::decode($decoded);
+        try {
+            $result = Serializer::decode($decoded);
+
+            if (!is_array($result)) {
+                throw new InvalidDecodedStringException($decoded);
+            }
+        } catch (\Throwable $e) {
+            if (!$e instanceof InvalidDecodedStringException) {
+                throw new InvalidDecodedStringException($decoded, 0, $e);
+            }
+
+            throw $e;
+        }
+
+        return $result;
     }
 }

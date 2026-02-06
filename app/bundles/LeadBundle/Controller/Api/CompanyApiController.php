@@ -1,73 +1,68 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Controller\Api;
 
-use FOS\RestBundle\Util\Codes;
+use Doctrine\Persistence\ManagerRegistry;
 use Mautic\ApiBundle\Controller\CommonApiController;
+use Mautic\ApiBundle\Helper\EntityResultHelper;
+use Mautic\CoreBundle\Factory\ModelFactory;
+use Mautic\CoreBundle\Helper\AppVersion;
+use Mautic\CoreBundle\Helper\CoreParametersHelper;
+use Mautic\CoreBundle\Security\Permissions\CorePermissions;
+use Mautic\CoreBundle\Translation\Translator;
 use Mautic\LeadBundle\Controller\LeadAccessTrait;
 use Mautic\LeadBundle\Entity\Company;
+use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Helper\IdentifyCompanyHelper;
+use Mautic\LeadBundle\Model\CompanyModel;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
+use Symfony\Component\Routing\RouterInterface;
 
 /**
- * Class CompanyApiController.
+ * @extends CommonApiController<Company>
  */
 class CompanyApiController extends CommonApiController
 {
-    use CustomFieldsApiControllerTrait, LeadAccessTrait;
+    use CustomFieldsApiControllerTrait;
+    use LeadAccessTrait;
 
     /**
-     * @param FilterControllerEvent $event
+     * @var CompanyModel|null
      */
-    public function initialize(FilterControllerEvent $event)
+    protected $model;
+
+    public function __construct(CorePermissions $security, Translator $translator, EntityResultHelper $entityResultHelper, RouterInterface $router, FormFactoryInterface $formFactory, AppVersion $appVersion, RequestStack $requestStack, ManagerRegistry $doctrine, ModelFactory $modelFactory, EventDispatcherInterface $dispatcher, CoreParametersHelper $coreParametersHelper)
     {
-        $this->model              = $this->getModel('lead.company');
+        $companyModel = $modelFactory->getModel('lead.company');
+        \assert($companyModel instanceof CompanyModel);
+
+        $this->model              = $companyModel;
         $this->entityClass        = Company::class;
         $this->entityNameOne      = 'company';
         $this->entityNameMulti    = 'companies';
         $this->serializerGroups[] = 'companyDetails';
 
-        parent::initialize($event);
+        parent::__construct($security, $translator, $entityResultHelper, $router, $formFactory, $appVersion, $requestStack, $doctrine, $modelFactory, $dispatcher, $coreParametersHelper);
     }
 
-    /**
-     * If an existing company is matched, it'll be merged. Otherwise it'll be created.
-     *
-     * @return \Symfony\Component\HttpFoundation\Response
-     */
-    public function newEntityAction()
+    public function getNewEntity(array $params)
     {
-        // Check for an email to see if the lead already exists
-        $parameters = $this->request->request->all();
-
-        if (empty($parameters['force'])) {
-            list($company, $companyEntities) = IdentifyCompanyHelper::findCompany($parameters, $this->getModel('lead.company'));
-
-            if (count($companyEntities)) {
-                return $this->editEntityAction($company['id']);
-            }
+        $leadCompanyModel = $this->getModel('lead.company');
+        \assert($leadCompanyModel instanceof CompanyModel);
+        [$company, $companyEntities] = IdentifyCompanyHelper::findCompany($params, $leadCompanyModel);
+        if (count($companyEntities)) {
+            return $this->model->getEntity($company['id']);
         }
 
-        return parent::newEntityAction();
+        return $this->model->getEntity();
     }
 
     /**
-     * {@inheritdoc}
-     *
-     * @param \Mautic\LeadBundle\Entity\Lead &$entity
-     * @param                                $parameters
-     * @param                                $form
-     * @param string                         $action
+     * @param Lead   &$entity
+     * @param string $action
      */
     protected function preSaveEntity(&$entity, $form, $parameters, $action = 'edit')
     {
@@ -80,16 +75,16 @@ class CompanyApiController extends CommonApiController
      * @param int $companyId Company ID
      * @param int $contactId Contact ID
      *
-     * @return \Symfony\Component\HttpFoundation\Response
+     * @return Response
      *
      * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
      */
     public function addContactAction($companyId, $contactId)
     {
         $company = $this->model->getEntity($companyId);
-        $view    = $this->view(['success' => 1], Codes::HTTP_OK);
+        $view    = $this->view(['success' => 1], Response::HTTP_OK);
 
-        if ($company === null) {
+        if (null === $company) {
             return $this->notFound();
         }
 
@@ -109,16 +104,16 @@ class CompanyApiController extends CommonApiController
      * @param int $companyId List ID
      * @param int $contactId Lead ID
      *
-     * @return \Symfony\Component\HttpFoundation\Response
+     * @return Response
      *
      * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
      */
     public function removeContactAction($companyId, $contactId)
     {
         $company = $this->model->getEntity($companyId);
-        $view    = $this->view(['success' => 1], Codes::HTTP_OK);
+        $view    = $this->view(['success' => 1], Response::HTTP_OK);
 
-        if ($company === null) {
+        if (null === $company) {
             return $this->notFound();
         }
 
@@ -126,7 +121,7 @@ class CompanyApiController extends CommonApiController
         $contact      = $contactModel->getEntity($contactId);
 
         // Does the contact exist and the user has permission to edit
-        if ($contact === null) {
+        if (null === $contact) {
             return $this->notFound();
         } elseif (!$this->security->hasEntityAccess('lead:leads:editown', 'lead:leads:editother', $contact->getPermissionUser())) {
             return $this->accessDenied();

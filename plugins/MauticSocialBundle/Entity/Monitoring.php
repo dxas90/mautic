@@ -1,91 +1,117 @@
 <?php
 
-/*
- * @copyright   2016 Mautic, Inc. All rights reserved
- * @author      Mautic, Inc
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace MauticPlugin\MauticSocialBundle\Entity;
 
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
 use Doctrine\ORM\Mapping as ORM;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
 use Mautic\CoreBundle\Entity\FormEntity;
+use Mautic\CoreBundle\Entity\UuidInterface;
+use Mautic\CoreBundle\Entity\UuidTrait;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Mapping\ClassMetadata;
 
-/**
- * Class Monitoring.
- */
-class Monitoring extends FormEntity
+#[ApiResource(
+    operations: [
+        new GetCollection(security: "is_granted('mauticSocial:monitoring:view')"),
+        new Post(security: "is_granted('mauticSocial:monitoring:create')"),
+        new Get(security: "is_granted('mauticSocial:monitoring:view')"),
+        new Put(security: "is_granted('mauticSocial:monitoring:edit')"),
+        new Patch(security: "is_granted('mauticSocial:monitoring:edit')"),
+        new Delete(security: "is_granted('mauticSocial:monitoring:delete')"),
+    ],
+    normalizationContext: [
+        'groups'                  => ['monitoring:read'],
+        'swagger_definition_name' => 'Read',
+        'api_included'            => ['category'],
+    ],
+    denormalizationContext: [
+        'groups'                  => ['monitoring:write'],
+        'swagger_definition_name' => 'Write',
+    ]
+)]
+class Monitoring extends FormEntity implements UuidInterface
 {
+    use UuidTrait;
     /**
      * @var int
      */
+    #[Groups(['monitoring:read'])]
     private $id;
 
     /**
      * @var string
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $title;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $description;
 
     /**
-     * @var \Mautic\CategoryBundle\Entity\Category
+     * @var \Mautic\CategoryBundle\Entity\Category|null
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $category;
 
     /**
      * @var array
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $lists = [];
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $networkType;
 
     /**
      * @var int
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $revision = 1;
 
     /**
      * @var array
      */
+    #[Groups(['monitoring:read'])]
     private $stats = [];
 
     /**
      * @var array
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $properties = [];
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $publishDown;
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
+    #[Groups(['monitoring:read', 'monitoring:write'])]
     private $publishUp;
 
-    /**
-     * @param ORM\ClassMetadata $metadata
-     */
-    public static function loadMetadata(ORM\ClassMetadata $metadata)
+    public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
 
         $builder->setTable('monitoring')
-            ->setCustomRepositoryClass('MauticPlugin\MauticSocialBundle\Entity\MonitoringRepository')
+            ->setCustomRepositoryClass(MonitoringRepository::class)
             ->addLifecycleEvent('cleanMonitorData', 'preUpdate')
             ->addLifecycleEvent('cleanMonitorData', 'prePersist');
 
@@ -104,14 +130,14 @@ class Monitoring extends FormEntity
         $builder->addNullableField('properties', 'array');
 
         $builder->addPublishDates();
+
+        static::addUuidField($builder);
     }
 
     /**
      * Constraints for required fields.
-     *
-     * @param ClassMetadata $metadata
      */
-    public static function loadValidatorMetadata(ClassMetadata $metadata)
+    public static function loadValidatorMetadata(ClassMetadata $metadata): void
     {
         $metadata->addPropertyConstraint('title', new Assert\NotBlank(
             ['message' => 'mautic.core.title.required']
@@ -213,7 +239,7 @@ class Monitoring extends FormEntity
     /**
      * Get publishDown.
      *
-     * @return \DateTime
+     * @return \DateTimeInterface
      */
     public function getPublishDown()
     {
@@ -223,7 +249,7 @@ class Monitoring extends FormEntity
     /**
      * Get publishUp.
      *
-     * @return \DateTime
+     * @return \DateTimeInterface
      */
     public function getPublishUp()
     {
@@ -233,9 +259,9 @@ class Monitoring extends FormEntity
     /**
      * Set the category id.
      *
-     * @param int $category
+     * @param \Mautic\CategoryBundle\Entity\Category|null $category
      */
-    public function setCategory($category)
+    public function setCategory($category): void
     {
         $this->isChanged('category', $category);
         $this->category = $category;
@@ -259,8 +285,6 @@ class Monitoring extends FormEntity
     /**
      * Set the monitor lists.
      *
-     * @param $lists
-     *
      * @return Monitoring
      */
     public function setLists($lists)
@@ -273,8 +297,6 @@ class Monitoring extends FormEntity
 
     /**
      * Set the network type.
-     *
-     * @param $networkType
      *
      * @return Monitoring
      */
@@ -379,7 +401,7 @@ class Monitoring extends FormEntity
     /**
      * Clear out old properties data.
      */
-    public function cleanMonitorData()
+    public function cleanMonitorData(): void
     {
         $property = $this->getProperties();
 
@@ -388,7 +410,7 @@ class Monitoring extends FormEntity
         }
 
         // clean up property array for the twitter handle
-        if ($this->getNetworkType() == 'twitter_handle') {
+        if ('twitter_handle' == $this->getNetworkType()) {
             $this->setProperties(
                 [
                     'handle'     => $property['handle'],
@@ -398,7 +420,7 @@ class Monitoring extends FormEntity
         }
 
         // clean up property array for the hashtag
-        if ($this->getNetworkType() == 'twitter_hashtag') {
+        if ('twitter_hashtag' == $this->getNetworkType()) {
             $this->setProperties(
                 [
                     'hashtag'    => $property['hashtag'],
@@ -408,7 +430,7 @@ class Monitoring extends FormEntity
         }
 
         // clean up clean up property array for the custom action
-        if ($this->getNetworkType() == 'twitter_custom') {
+        if ('twitter_custom' == $this->getNetworkType()) {
             $this->setProperties(
                 [
                     'custom' => $property['custom'],

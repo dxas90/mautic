@@ -1,56 +1,27 @@
 <?php
 
-/*
- * @copyright   2016 Mautic, Inc. All rights reserved
- * @author      Mautic, Inc
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace MauticPlugin\MauticSocialBundle\Command;
 
 use Mautic\CoreBundle\Helper\CoreParametersHelper;
+use Mautic\CoreBundle\Translation\Translator;
 use Mautic\PluginBundle\Helper\IntegrationHelper;
 use MauticPlugin\MauticSocialBundle\Entity\Monitoring;
 use MauticPlugin\MauticSocialBundle\Event\SocialMonitorEvent;
 use MauticPlugin\MauticSocialBundle\Helper\TwitterCommandHelper;
 use MauticPlugin\MauticSocialBundle\Integration\TwitterIntegration;
 use MauticPlugin\MauticSocialBundle\SocialEvents;
-use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\Translation\TranslatorInterface;
 
-abstract class MonitorTwitterBaseCommand extends ContainerAwareCommand
+abstract class MonitorTwitterBaseCommand extends Command
 {
     /**
      * @var TwitterIntegration
      */
     protected $twitter;
-
-    /**
-     * @var TranslatorInterface
-     */
-    protected $translator;
-
-    /**
-     * @var EventDispatcherInterface
-     */
-    protected $dispatcher;
-
-    /**
-     * @var IntegrationHelper
-     */
-    protected $integrationHelper;
-
-    /**
-     * @var TwitterCommandHelper
-     */
-    private $twitterCommandHelper;
 
     /**
      * @var InputInterface
@@ -77,28 +48,14 @@ abstract class MonitorTwitterBaseCommand extends ContainerAwareCommand
      */
     protected $queryCount = 100;
 
-    /**
-     * MonitorTwitterBaseCommand constructor.
-     *
-     * @param EventDispatcherInterface $dispatcher
-     * @param TranslatorInterface      $translator
-     * @param IntegrationHelper        $integrationHelper
-     * @param TwitterCommandHelper     $twitterCommandHelper
-     * @param CoreParametersHelper     $coreParametersHelper
-     */
     public function __construct(
-        EventDispatcherInterface $dispatcher,
-        TranslatorInterface $translator,
-        IntegrationHelper $integrationHelper,
-        TwitterCommandHelper $twitterCommandHelper,
-        CoreParametersHelper $coreParametersHelper
+        protected EventDispatcherInterface $dispatcher,
+        protected Translator $translator,
+        protected IntegrationHelper $integrationHelper,
+        private TwitterCommandHelper $twitterCommandHelper,
+        CoreParametersHelper $coreParametersHelper,
     ) {
-        $this->dispatcher           = $dispatcher;
-        $this->translator           = $translator;
-        $this->integrationHelper    = $integrationHelper;
-        $this->twitterCommandHelper = $twitterCommandHelper;
-
-        $this->translator->setLocale($coreParametersHelper->getParameter('locale', 'en_US'));
+        $this->translator->setLocale($coreParametersHelper->get('locale', 'en_US'));
 
         parent::__construct();
     }
@@ -146,7 +103,7 @@ abstract class MonitorTwitterBaseCommand extends ContainerAwareCommand
     /**
      * Used in various areas to set name of the network being searched.
      *
-     * @return string twitter|facebook|linkedin etc..
+     * @return string twitter|facebook etc..
      */
     abstract public function getNetworkName();
 
@@ -161,39 +118,37 @@ abstract class MonitorTwitterBaseCommand extends ContainerAwareCommand
 
     /**
      * Main execution method. Gets the integration settings, processes the search criteria.
-     *
-     * @param InputInterface  $input
-     * @param OutputInterface $output
-     *
-     * @return int|null
      */
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $this->input      = $input;
-        $this->output     = $output;
-        $this->maxRuns    = $this->input->getOption('max-runs');
-        $this->queryCount = $this->input->getOption('query-count');
-        $this->twitter    = $this->integrationHelper->getIntegrationObject('Twitter');
+        $this->input        = $input;
+        $this->output       = $output;
+        $this->maxRuns      = $this->input->getOption('max-runs');
+        $this->queryCount   = $this->input->getOption('query-count');
+        $twitterIntegration = $this->integrationHelper->getIntegrationObject('Twitter');
 
-        if ($this->twitter === false || $this->twitter->getIntegrationSettings()->getIsPublished() === false) {
+        if (false === $twitterIntegration || false === $twitterIntegration->getIntegrationSettings()->getIsPublished()) {
             $this->output->writeln($this->translator->trans('mautic.social.monitoring.twitter.not.published'));
 
-            return 1;
+            return Command::FAILURE;
         }
+
+        \assert($twitterIntegration instanceof TwitterIntegration);
+        $this->twitter = $twitterIntegration;
 
         if (!$this->twitter->isAuthorized()) {
             $this->output->writeln($this->translator->trans('mautic.social.monitoring.twitter.not.configured'));
 
-            return 1;
+            return Command::FAILURE;
         }
 
         // get the mid from the cli
-        $mid = $input->getOption('mid');
+        $mid = (int) $input->getOption('mid');
 
         if (!$mid) {
             $this->output->writeln($this->translator->trans('mautic.social.monitoring.twitter.mid.empty'));
 
-            return 1;
+            return Command::FAILURE;
         }
 
         $this->twitterCommandHelper->setOutput($output);
@@ -203,18 +158,18 @@ abstract class MonitorTwitterBaseCommand extends ContainerAwareCommand
         if (!$monitor || !$monitor->getId()) {
             $this->output->writeln($this->translator->trans('mautic.social.monitoring.twitter.monitor.does.not.exist', ['%id%' => $mid]));
 
-            return 1;
+            return Command::FAILURE;
         }
 
         // process the monitor
         $this->processMonitor($monitor);
 
         $this->dispatcher->dispatch(
-            SocialEvents::MONITOR_POST_PROCESS,
-            new SocialMonitorEvent($this->getNetworkName(), $monitor, $this->twitterCommandHelper->getManipulatedLeads(), $this->twitterCommandHelper->getNewLeadsCount(), $this->twitterCommandHelper->getUpdatedLeadsCount())
+            new SocialMonitorEvent($this->getNetworkName(), $monitor, $this->twitterCommandHelper->getManipulatedLeads(), $this->twitterCommandHelper->getNewLeadsCount(), $this->twitterCommandHelper->getUpdatedLeadsCount()),
+            SocialEvents::MONITOR_POST_PROCESS
         );
 
-        return 0;
+        return Command::SUCCESS;
     }
 
     /**
@@ -231,7 +186,7 @@ abstract class MonitorTwitterBaseCommand extends ContainerAwareCommand
     {
         $results = $this->getTweets($monitor);
 
-        if ($results === false || !isset($results['statuses'])) {
+        if (false === $results || !isset($results['statuses'])) {
             $this->output->writeln('No statuses found');
 
             if (!empty($results['errors'])) {
@@ -341,48 +296,5 @@ abstract class MonitorTwitterBaseCommand extends ContainerAwareCommand
         $this->printQueryMetadata($results['search_metadata']);
         $this->printTweets($results['statuses']);
         $this->output->writeln('------------------------');
-    }
-
-    /**
-     * Processes a list of tweets and creates / updates leads in Mautic.
-     *
-     * @deprecated 2.12 to be removed in 3.0 Use the TwitterCommandHelper directly
-     *
-     * @param array      $statusList
-     * @param Monitoring $monitor
-     *
-     * @return int
-     */
-    protected function createLeadsFromStatuses($statusList, $monitor)
-    {
-        return $this->twitterCommandHelper->createLeadsFromStatuses($statusList, $monitor);
-    }
-
-    /**
-     * Gets the twitter integration object and returns the settings.
-     *
-     * @deprecated 2.12 to be removed in 3.0 Use $this->twitter directly
-     *
-     * @return TwitterIntegration
-     */
-    protected function getTwitterIntegration()
-    {
-        return $this->twitter;
-    }
-
-    /**
-     * takes an array of query params for twitter and gives a list back.
-     *
-     * URL Encoding done in makeRequest()
-     *
-     * @deprecated 2.12 to be removed in 3.0 Just implode directly in your code
-     *
-     * @param array $query
-     *
-     * @return string
-     */
-    protected function buildTwitterSearchQuery(array $query)
-    {
-        return implode(' ', $query);
     }
 }

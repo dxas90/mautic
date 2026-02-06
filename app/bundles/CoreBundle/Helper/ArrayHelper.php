@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CoreBundle\Helper;
 
 /**
@@ -20,7 +11,6 @@ class ArrayHelper
      * If the $key exists in the $origin array then it will return its value.
      *
      * @param mixed $key
-     * @param array $origin
      * @param mixed $defaultValue
      *
      * @return mixed
@@ -35,7 +25,6 @@ class ArrayHelper
      * and unsets the $key from the $array.
      *
      * @param mixed $key
-     * @param array $origin
      * @param mixed $defaultValue
      *
      * @return mixed
@@ -51,16 +40,99 @@ class ArrayHelper
 
     /**
      * Selects keys defined in the $keys array and returns array that contains only those.
-     *
-     * @param array $keys
-     * @param array $origin
-     *
-     * @return array
      */
-    public static function select(array $keys, array $origin)
+    public static function select(array $keys, array $origin): array
     {
-        return array_filter($origin, function ($value, $key) use ($keys) {
-            return in_array($key, $keys, true);
-        }, ARRAY_FILTER_USE_BOTH);
+        return array_filter($origin, fn ($value, $key): bool => in_array($key, $keys, true), ARRAY_FILTER_USE_BOTH);
+    }
+
+    /**
+     * Sum between two array.
+     *
+     * @param mixed[] $a1
+     * @param mixed[] $b2
+     *
+     * @return mixed[]
+     */
+    public static function sum(array $a1, array $b2): array
+    {
+        return self::sumOrSub($a1, $b2);
+    }
+
+    /**
+     * SUBSTRACT between two array.
+     */
+    public static function sub(array $a1, array $b2): array
+    {
+        return self::sumOrSub($a1, $b2, true);
+    }
+
+    /**
+     * Removes null and empty string values from the array.
+     *
+     * @param mixed[] $array
+     *
+     * @return mixed[]
+     */
+    public static function removeEmptyValues(array $array): array
+    {
+        return array_filter(
+            $array,
+            fn ($value): bool => !is_null($value) && '' !== $value
+        );
+    }
+
+    /**
+     * Flip array or sub arrays.
+     *
+     * @param array<int|string|array<int|string>> $masterArrays
+     *
+     * @return array<int|string|array<int|string>>
+     */
+    public static function flipArray(array $masterArrays): array
+    {
+        if (!is_array(end($masterArrays))) {
+            return array_flip($masterArrays);
+        }
+
+        return array_map(
+            fn (array $subArray) => array_flip($subArray),
+            $masterArrays
+        );
+    }
+
+    /**
+     * @param array<mixed> $multidimensionalArray
+     *
+     * @return array<mixed>
+     */
+    public static function flatten(array $multidimensionalArray): array
+    {
+        $flattenedArray = [];
+
+        array_walk_recursive(
+            $multidimensionalArray,
+            function ($value, $key) use (&$flattenedArray): void {
+                $flattenedArray[$key] = $value;
+            }
+        );
+
+        return $flattenedArray;
+    }
+
+    /**
+     *  SUM/SUBSTRACT between two arrays.
+     *
+     * @param bool $subtracted
+     */
+    private static function sumOrSub(array $a1, array $b2, $subtracted = false): array
+    {
+        return array_map(function ($x, $y) use ($subtracted) {
+            if ($subtracted) {
+                return $x - $y;
+            } else {
+                return $x + $y;
+            }
+        }, $a1, $b2);
     }
 }

@@ -1,18 +1,10 @@
 <?php
 
-/*
- * @copyright   2017 Mautic, Inc. All rights reserved
- * @author      Mautic, Inc
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace MauticPlugin\MauticSocialBundle\Helper;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Mautic\CoreBundle\Helper\CoreParametersHelper;
+use Mautic\CoreBundle\Translation\Translator;
 use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Model\FieldModel;
 use Mautic\LeadBundle\Model\LeadModel;
@@ -21,108 +13,41 @@ use MauticPlugin\MauticSocialBundle\Exception\ExitMonitorException;
 use MauticPlugin\MauticSocialBundle\Model\MonitoringModel;
 use MauticPlugin\MauticSocialBundle\Model\PostCountModel;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Translation\TranslatorInterface;
 
 class TwitterCommandHelper
 {
-    /**
-     * @var LeadModel
-     */
-    private $leadModel;
+    private ?OutputInterface $output = null;
 
-    /**
-     * @var FieldModel
-     */
-    private $fieldModel;
+    private int $updatedLeads = 0;
 
-    /**
-     * @var MonitoringModel
-     */
-    private $monitoringModel;
+    private int $newLeads = 0;
 
-    /**
-     * @var PostCountModel
-     */
-    private $postCountModel;
-
-    /**
-     * @var TranslatorInterface
-     */
-    private $translator;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    private $em;
-
-    /**
-     * @var OutputInterface
-     */
-    private $output;
-
-    /**
-     * @var int
-     */
-    private $updatedLeads = 0;
-
-    /**
-     * @var int
-     */
-    private $newLeads = 0;
-
-    /**
-     * @var array
-     */
-    private $manipulatedLeads = [];
+    private array $manipulatedLeads = [];
 
     /**
      * @var string
      */
     private $twitterHandleField;
 
-    /**
-     * TwitterCommandHelper constructor.
-     *
-     * @param LeadModel              $leadModel
-     * @param FieldModel             $fieldModel
-     * @param MonitoringModel        $monitoringModel
-     * @param PostCountModel         $postCountModel
-     * @param TranslatorInterface    $translator
-     * @param EntityManagerInterface $em
-     * @param CoreParametersHelper   $coreParametersHelper
-     */
     public function __construct(
-        LeadModel $leadModel,
-        FieldModel $fieldModel,
-        MonitoringModel $monitoringModel,
-        PostCountModel $postCountModel,
-        TranslatorInterface $translator,
-        EntityManagerInterface $em,
-        CoreParametersHelper $coreParametersHelper
+        private LeadModel $leadModel,
+        private FieldModel $fieldModel,
+        private MonitoringModel $monitoringModel,
+        private PostCountModel $postCountModel,
+        private Translator $translator,
+        private EntityManagerInterface $em,
+        CoreParametersHelper $coreParametersHelper,
     ) {
-        $this->leadModel       = $leadModel;
-        $this->fieldModel      = $fieldModel;
-        $this->monitoringModel = $monitoringModel;
-        $this->postCountModel  = $postCountModel;
-        $this->translator      = $translator;
-        $this->em              = $em;
-
-        $this->translator->setLocale($coreParametersHelper->getParameter('mautic.locale', 'en_US'));
-        $this->twitterHandleField = $coreParametersHelper->getParameter('mautic.twitter_handle_field', 'twitter');
+        $this->translator->setLocale($coreParametersHelper->get('locale', 'en_US'));
+        $this->twitterHandleField = $coreParametersHelper->get('twitter_handle_field', 'twitter');
     }
 
-    /**
-     * @return int
-     */
-    public function getNewLeadsCount()
+    public function getNewLeadsCount(): int
     {
         return $this->newLeads;
     }
 
-    /**
-     * @return int
-     */
-    public function getUpdatedLeadsCount()
+    public function getUpdatedLeadsCount(): int
     {
         return $this->updatedLeads;
     }
@@ -135,10 +60,7 @@ class TwitterCommandHelper
         return $this->manipulatedLeads;
     }
 
-    /**
-     * @param OutputInterface $output
-     */
-    public function setOutput(OutputInterface $output)
+    public function setOutput(OutputInterface $output): void
     {
         $this->output = $output;
     }
@@ -147,14 +69,12 @@ class TwitterCommandHelper
      * @param string $message
      * @param bool   $newLine
      */
-    private function output($message, $newLine = true)
+    private function output($message, $newLine = true): void
     {
-        if ($this->output instanceof OutputInterface) {
-            if ($newLine) {
-                $this->output->writeln($message);
-            } else {
-                $this->output->write($message);
-            }
+        if ($newLine) {
+            $this->output->writeln($message);
+        } else {
+            $this->output->write($message);
         }
     }
 
@@ -163,10 +83,8 @@ class TwitterCommandHelper
      *
      * @param array      $statusList
      * @param Monitoring $monitor
-     *
-     * @return int
      */
-    public function createLeadsFromStatuses($statusList, $monitor)
+    public function createLeadsFromStatuses($statusList, $monitor): int
     {
         $leadField = $this->fieldModel->getRepository()->findOneBy(['alias' => $this->twitterHandleField]);
 
@@ -203,8 +121,8 @@ class TwitterCommandHelper
             $usersByHandles[] = $expr->literal($status['user']['screen_name']);
 
             // Split the twitter user's name into its parts if we're matching to contacts by name
-            if ($monitorProperties['checknames'] && $status['user']['name'] && strpos($status['user']['name'], ' ') !== false) {
-                list($firstName, $lastName) = $this->splitName($status['user']['name']);
+            if ($monitorProperties['checknames'] && $status['user']['name'] && str_contains($status['user']['name'], ' ')) {
+                [$firstName, $lastName] = $this->splitName($status['user']['name']);
 
                 if (!empty($firstName) && !empty($lastName)) {
                     $usersByName['firstnames'][] = $expr->literal($firstName);
@@ -233,7 +151,7 @@ class TwitterCommandHelper
 
             // Key by twitter handle
             $twitterLeads = [];
-            foreach ($leads as $leadId => $lead) {
+            foreach ($leads as $lead) {
                 $fields                       = $lead->getFields();
                 $twitterHandle                = strtolower($fields[$handleFieldGroup][$this->twitterHandleField]['value']);
                 $twitterLeads[$twitterHandle] = $lead;
@@ -271,7 +189,7 @@ class TwitterCommandHelper
             // key by name
             $namedLeads = [];
             /** @var Lead $lead */
-            foreach ($leadsByName as $leadId => $lead) {
+            foreach ($leadsByName as $lead) {
                 $firstName                            = $lead->getFirstname();
                 $lastName                             = $lead->getLastname();
                 $namedLeads[$firstName.' '.$lastName] = $lead;
@@ -317,7 +235,7 @@ class TwitterCommandHelper
                     $leadEntity = new Lead();
                     $leadEntity->setNewlyCreated(true);
 
-                    list($firstName, $lastName) = $this->splitName($status['user']['name']);
+                    [$firstName, $lastName] = $this->splitName($status['user']['name']);
 
                     // build new lead fields
                     $fields = [
@@ -336,9 +254,7 @@ class TwitterCommandHelper
                 $leadEntity->setPreferredProfileImage('Twitter');
 
                 // save the lead now
-                if ($lastActive instanceof \DateTimeInterface) {
-                    $leadEntity->setLastActive($lastActive->format('Y-m-d H:i:s'));
-                }
+                $leadEntity->setLastActive($lastActive->format('Y-m-d H:i:s'));
 
                 try {
                     // save the lead entity
@@ -376,10 +292,9 @@ class TwitterCommandHelper
     /**
      * Set the monitor's stat record with the metadata.
      *
-     * @param Monitoring $monitor
-     * @param array      $searchMeta
+     * @param array $searchMeta
      */
-    public function setMonitorStats(Monitoring $monitor, $searchMeta)
+    public function setMonitorStats(Monitoring $monitor, $searchMeta): void
     {
         $monitor->setStats($searchMeta);
 
@@ -390,10 +305,8 @@ class TwitterCommandHelper
      * Get monitor record entity.
      *
      * @param int $mid
-     *
-     * @return \MauticPlugin\MauticSocialBundle\Entity\Monitoring
      */
-    public function getMonitor($mid)
+    public function getMonitor($mid): ?Monitoring
     {
         return $this->monitoringModel->getEntity($mid);
     }
@@ -403,9 +316,9 @@ class TwitterCommandHelper
      *
      * @param string $name Space separated first & last name. Supports multiple first names
      *
-     * @return array($firstName, $lastName)
+     * @return array{0: string, 1?: string}
      */
-    private function splitName($name)
+    private function splitName(string $name): array
     {
         // array the entire name
         $nameParts = explode(' ', $name);
@@ -425,7 +338,7 @@ class TwitterCommandHelper
      * @param Monitoring $monitor
      * @param Lead       $lead
      */
-    private function setMonitorLeadStat($monitor, $lead)
+    private function setMonitorLeadStat($monitor, $lead): void
     {
         // track the lead in our monitor_leads table
         $monitorLead = new \MauticPlugin\MauticSocialBundle\Entity\Lead();
@@ -434,7 +347,7 @@ class TwitterCommandHelper
         $monitorLead->setDateAdded(new \DateTime());
 
         /* @var \MauticPlugin\MauticSocialBundle\Entity\LeadRepository $monitorRepository */
-        $monitorRepository = $this->em->getRepository('MauticSocialBundle:lead');
+        $monitorRepository = $this->em->getRepository(\MauticPlugin\MauticSocialBundle\Entity\Lead::class);
 
         $monitorRepository->saveEntity($monitorLead);
     }
@@ -443,9 +356,8 @@ class TwitterCommandHelper
      * Increment the post counter.
      *
      * @param Monitoring $monitor
-     * @param $tweet
      */
-    private function incrementPostCount($monitor, $tweet)
+    private function incrementPostCount($monitor, $tweet): void
     {
         $date = new \DateTime($tweet['created_at']);
 

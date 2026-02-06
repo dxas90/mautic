@@ -1,17 +1,9 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\SmsBundle\Tests\EventListener;
 
 use Mautic\CoreBundle\Event\TokenReplacementEvent;
+use Mautic\CoreBundle\Helper\CoreParametersHelper;
 use Mautic\CoreBundle\Model\AuditLogModel;
 use Mautic\LeadBundle\Entity\Lead;
 use Mautic\PageBundle\Entity\Trackable;
@@ -19,21 +11,29 @@ use Mautic\PageBundle\Helper\TokenHelper;
 use Mautic\PageBundle\Model\TrackableModel;
 use Mautic\SmsBundle\EventListener\SmsSubscriber;
 use Mautic\SmsBundle\Helper\SmsHelper;
-use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use PHPUnit\Framework\TestCase;
 
-class SmsSubscriberTest extends WebTestCase
+class SmsSubscriberTest extends TestCase
 {
-    private $messsageText = 'custom http://mautic.com text';
+    private CoreParametersHelper|\PHPUnit\Framework\MockObject\MockObject $coreParametersHelper;
 
-    private $messsageUrl = 'http://mautic.com';
+    private $messageText = 'custom http://mautic.com text';
 
-    public function testOnTokenReplacementWithTrackableUrls()
+    private $messageUrl = 'http://mautic.com';
+
+    protected function setUp(): void
+    {
+        $this->coreParametersHelper = $this->createMock(CoreParametersHelper::class);
+        parent::setUp();
+    }
+
+    public function testOnTokenReplacementWithTrackableUrls(): void
     {
         $mockAuditLogModel = $this->createMock(AuditLogModel::class);
 
         $mockTrackableModel = $this->createMock(TrackableModel::class);
         $mockTrackableModel->expects($this->any())->method('parseContentForTrackables')->willReturn([
-            $this->messsageUrl,
+            $this->messageUrl,
             new Trackable(),
         ]);
         $mockTrackableModel->expects($this->any())->method('generateTrackableUrl')->willReturn('custom');
@@ -48,25 +48,26 @@ class SmsSubscriberTest extends WebTestCase
         $mockSmsHelper->expects($this->any())->method('getDisableTrackableUrls')->willReturn(false);
 
         $lead                  = new Lead();
-        $tokenReplacementEvent = new TokenReplacementEvent($this->messsageText, $lead, ['channel' => ['sms', 1]]);
+        $tokenReplacementEvent = new TokenReplacementEvent($this->messageText, $lead, ['channel' => [1 => 'sms']]);
         $subscriber            = new SmsSubscriber(
             $mockAuditLogModel,
             $mockTrackableModel,
             $mockPageTokenHelper,
             $mockAssetTokenHelper,
-            $mockSmsHelper
+            $mockSmsHelper,
+            $this->coreParametersHelper
         );
         $subscriber->onTokenReplacement($tokenReplacementEvent);
-        $this->assertNotSame($this->messsageText, $tokenReplacementEvent->getContent());
+        $this->assertNotSame($this->messageText, $tokenReplacementEvent->getContent());
     }
 
-    public function testOnTokenReplacementWithDisableTrackableUrls()
+    public function testOnTokenReplacementWithDisableTrackableUrls(): void
     {
         $mockAuditLogModel = $this->createMock(AuditLogModel::class);
 
         $mockTrackableModel = $this->createMock(TrackableModel::class);
         $mockTrackableModel->expects($this->any())->method('parseContentForTrackables')->willReturn([
-            $this->messsageUrl,
+            $this->messageUrl,
             new Trackable(),
         ]);
         $mockTrackableModel->expects($this->any())->method('generateTrackableUrl')->willReturn('custom');
@@ -81,15 +82,16 @@ class SmsSubscriberTest extends WebTestCase
         $mockSmsHelper->expects($this->any())->method('getDisableTrackableUrls')->willReturn(true);
 
         $lead                  = new Lead();
-        $tokenReplacementEvent = new TokenReplacementEvent($this->messsageText, $lead, ['channel' => ['sms', 1]]);
+        $tokenReplacementEvent = new TokenReplacementEvent($this->messageText, $lead, ['channel' => ['sms', 1]]);
         $subscriber            = new SmsSubscriber(
             $mockAuditLogModel,
             $mockTrackableModel,
             $mockPageTokenHelper,
             $mockAssetTokenHelper,
-            $mockSmsHelper
+            $mockSmsHelper,
+            $this->coreParametersHelper
         );
         $subscriber->onTokenReplacement($tokenReplacementEvent);
-        $this->assertSame($this->messsageText, $tokenReplacementEvent->getContent());
+        $this->assertSame($this->messageText, $tokenReplacementEvent->getContent());
     }
 }

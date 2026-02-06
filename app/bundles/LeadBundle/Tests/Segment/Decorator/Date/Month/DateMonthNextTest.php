@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Tests\Segment\Decorator\Date\Month;
 
 use Mautic\CoreBundle\Helper\DateTimeHelper;
@@ -18,12 +9,10 @@ use Mautic\LeadBundle\Segment\Decorator\Date\Month\DateMonthNext;
 use Mautic\LeadBundle\Segment\Decorator\Date\TimezoneResolver;
 use Mautic\LeadBundle\Segment\Decorator\DateDecorator;
 
-class DateMonthNextTest extends \PHPUnit_Framework_TestCase
+#[\PHPUnit\Framework\Attributes\CoversClass(DateMonthNext::class)]
+class DateMonthNextTest extends \PHPUnit\Framework\TestCase
 {
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\Month\DateMonthNext::getOperator
-     */
-    public function testGetOperatorBetween()
+    public function testGetOperatorBetween(): void
     {
         $dateDecorator    = $this->createMock(DateDecorator::class);
         $timezoneResolver = $this->createMock(TimezoneResolver::class);
@@ -39,10 +28,7 @@ class DateMonthNextTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals('like', $filterDecorator->getOperator($contactSegmentFilterCrate));
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\Month\DateMonthNext::getOperator
-     */
-    public function testGetOperatorLessOrEqual()
+    public function testGetOperatorLessOrEqual(): void
     {
         $dateDecorator    = $this->createMock(DateDecorator::class);
         $timezoneResolver = $this->createMock(TimezoneResolver::class);
@@ -62,10 +48,7 @@ class DateMonthNextTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals('=<', $filterDecorator->getOperator($contactSegmentFilterCrate));
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\Month\DateMonthNext::getParameterValue
-     */
-    public function testGetParameterValueBetween()
+    public function testGetParameterValueBetween(): void
     {
         $dateDecorator    = $this->createMock(DateDecorator::class);
         $timezoneResolver = $this->createMock(TimezoneResolver::class);
@@ -89,10 +72,7 @@ class DateMonthNextTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals($expectedDate->format('Y-m-%'), $filterDecorator->getParameterValue($contactSegmentFilterCrate));
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\Month\DateMonthNext::getParameterValue
-     */
-    public function testGetParameterValueSingle()
+    public function testGetParameterValueSingle(): void
     {
         $dateDecorator    = $this->createMock(DateDecorator::class);
         $timezoneResolver = $this->createMock(TimezoneResolver::class);

@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ReportBundle\Model;
 
 use Mautic\CoreBundle\Helper\CoreParametersHelper;
@@ -20,33 +11,30 @@ class ReportExportOptions
      */
     private $batchSize;
 
-    /**
-     * @var int
-     */
-    private $page;
+    private int $page;
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
     private $dateFrom;
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
     private $dateTo;
 
     public function __construct(CoreParametersHelper $coreParametersHelper)
     {
-        $this->batchSize = $coreParametersHelper->getParameter('report_export_batch_size');
+        $this->batchSize = $coreParametersHelper->get('report_export_batch_size');
         $this->page      = 1;
     }
 
-    public function beginExport()
+    public function beginExport(): void
     {
         $this->page = 1;
     }
 
-    public function nextBatch()
+    public function nextBatch(): void
     {
         ++$this->page;
     }
@@ -59,10 +47,7 @@ class ReportExportOptions
         return $this->batchSize;
     }
 
-    /**
-     * @return int
-     */
-    public function getPage()
+    public function getPage(): int
     {
         return $this->page;
     }
@@ -76,7 +61,7 @@ class ReportExportOptions
     }
 
     /**
-     * @return \DateTime
+     * @return \DateTimeInterface
      */
     public function getDateFrom()
     {
@@ -86,13 +71,13 @@ class ReportExportOptions
     /**
      * @param \DateTime $dateFrom
      */
-    public function setDateFrom($dateFrom)
+    public function setDateFrom($dateFrom): void
     {
         $this->dateFrom = $dateFrom;
     }
 
     /**
-     * @return \DateTime
+     * @return \DateTimeInterface
      */
     public function getDateTo()
     {
@@ -102,7 +87,7 @@ class ReportExportOptions
     /**
      * @param \DateTime $dateTo
      */
-    public function setDateTo($dateTo)
+    public function setDateTo($dateTo): void
     {
         $this->dateTo = $dateTo;
     }

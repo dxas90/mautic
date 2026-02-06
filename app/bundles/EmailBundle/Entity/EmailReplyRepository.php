@@ -2,19 +2,19 @@
 
 namespace Mautic\EmailBundle\Entity;
 
-use Doctrine\ORM\EntityRepository;
+use Mautic\CoreBundle\Entity\CommonRepository;
 use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Entity\TimelineTrait;
 
 /**
- * Class EmailReplyRepository.
+ * @extends CommonRepository<EmailReply>
  */
-final class EmailReplyRepository extends EntityRepository implements EmailReplyRepositoryInterface
+final class EmailReplyRepository extends CommonRepository implements EmailReplyRepositoryInterface
 {
     use TimelineTrait;
 
     /**
-     * @param int|Lead $leadId
+     * @param int|Lead|null $leadId
      *
      * @return array
      */
@@ -27,9 +27,12 @@ final class EmailReplyRepository extends EntityRepository implements EmailReplyR
         $qb->from(MAUTIC_TABLE_PREFIX.'email_stat_replies', 'reply')
             ->innerJoin('reply', MAUTIC_TABLE_PREFIX.'email_stats', 'stat', 'reply.stat_id = stat.id')
             ->leftJoin('stat', MAUTIC_TABLE_PREFIX.'emails', 'email', 'stat.email_id = email.id')
-            ->leftJoin('stat', MAUTIC_TABLE_PREFIX.'email_copies', 'email_copy', 'stat.copy_id = email_copy.id')
-            ->andWhere('stat.lead_id = :leadId')
-            ->setParameter('leadId', $leadId);
+            ->leftJoin('stat', MAUTIC_TABLE_PREFIX.'email_copies', 'email_copy', 'stat.copy_id = email_copy.id');
+
+        if (null !== $leadId) {
+            $qb->andWhere('stat.lead_id = :leadId')
+                ->setParameter('leadId', $leadId);
+        }
 
         if (!empty($options['fromDate'])) {
             /** @var \DateTime $fromDate */
@@ -54,10 +57,15 @@ final class EmailReplyRepository extends EntityRepository implements EmailReplyR
         return $this->getTimelineResults(
             $qb,
             $options,
-            'storedSubject, e.subject',
-            'reply.date_replied',
+            'storedSubject, email.subject',
+            'reply.id',
             [],
             ['date_replied']
         );
+    }
+
+    public function getTableAlias(): string
+    {
+        return 'reply';
     }
 }

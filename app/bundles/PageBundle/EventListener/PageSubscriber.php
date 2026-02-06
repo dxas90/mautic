@@ -1,91 +1,47 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\PageBundle\EventListener;
 
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
 use Mautic\CoreBundle\Helper\IpLookupHelper;
+use Mautic\CoreBundle\Helper\LanguageHelper;
 use Mautic\CoreBundle\Model\AuditLogModel;
-use Mautic\CoreBundle\Templating\Helper\AssetsHelper;
+use Mautic\CoreBundle\Twig\Helper\AssetsHelper;
+use Mautic\PageBundle\Entity\Page;
 use Mautic\PageBundle\Event as Events;
+use Mautic\PageBundle\Event\PageEditSubmitEvent;
+use Mautic\PageBundle\Event\PageEvent;
+use Mautic\PageBundle\Model\PageDraftModel;
 use Mautic\PageBundle\Model\PageModel;
 use Mautic\PageBundle\PageEvents;
-use Mautic\QueueBundle\Event\QueueConsumerEvent;
-use Mautic\QueueBundle\Queue\QueueConsumerResults;
-use Mautic\QueueBundle\QueueEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-/**
- * Class PageSubscriber.
- */
-class PageSubscriber extends CommonSubscriber
+class PageSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var AssetsHelper
-     */
-    protected $assetsHelper;
-
-    /**
-     * @var AuditLogModel
-     */
-    protected $auditLogModel;
-
-    /**
-     * @var IpLookupHelper
-     */
-    protected $ipLookupHelper;
-
-    /**
-     * @var PageModel
-     */
-    protected $pageModel;
-
-    /**
-     * PageSubscriber constructor.
-     *
-     * @param AssetsHelper   $assetsHelper
-     * @param IpLookupHelper $ipLookupHelper
-     * @param AuditLogModel  $auditLogModel
-     * @param PageModel      $pageModel
-     */
     public function __construct(
-        AssetsHelper $assetsHelper,
-        IpLookupHelper $ipLookupHelper,
-        AuditLogModel $auditLogModel,
-        PageModel $pageModel
+        private AssetsHelper $assetsHelper,
+        private IpLookupHelper $ipLookupHelper,
+        private AuditLogModel $auditLogModel,
+        private LanguageHelper $languageHelper,
+        private PageModel $pageModel,
+        private PageDraftModel $pageDraftModel,
     ) {
-        $this->assetsHelper   = $assetsHelper;
-        $this->ipLookupHelper = $ipLookupHelper;
-        $this->auditLogModel  = $auditLogModel;
-        $this->pageModel      = $pageModel;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
-            PageEvents::PAGE_POST_SAVE   => ['onPagePostSave', 0],
-            PageEvents::PAGE_POST_DELETE => ['onPageDelete', 0],
-            PageEvents::PAGE_ON_DISPLAY  => ['onPageDisplay', -255], // We want this to run last
-            QueueEvents::PAGE_HIT        => ['onPageHit', 0],
+            PageEvents::PAGE_POST_SAVE      => ['onPagePostSave', 0],
+            PageEvents::PAGE_POST_DELETE    => ['onPageDelete', 0],
+            PageEvents::PAGE_ON_DISPLAY     => ['onPageDisplay', -255], // We want this to run last
+            PageEditSubmitEvent::class      => ['managePageDraft'],
         ];
     }
 
     /**
      * Add an entry to the audit log.
-     *
-     * @param Events\PageEvent $event
      */
-    public function onPagePostSave(Events\PageEvent $event)
+    public function onPagePostSave(PageEvent $event): void
     {
         $page = $event->getPage();
         if ($details = $event->getChanges()) {
@@ -99,14 +55,15 @@ class PageSubscriber extends CommonSubscriber
             ];
             $this->auditLogModel->writeToLog($log);
         }
+        if (!array_key_exists($page->getLanguage(), $this->languageHelper->getSupportedLanguages())) {
+            $this->languageHelper->extractLanguagePackage($page->getLanguage());
+        }
     }
 
     /**
      * Add a delete entry to the audit log.
-     *
-     * @param Events\PageEvent $event
      */
-    public function onPageDelete(Events\PageEvent $event)
+    public function onPageDelete(PageEvent $event): void
     {
         $page = $event->getPage();
         $log  = [
@@ -125,10 +82,8 @@ class PageSubscriber extends CommonSubscriber
      * - </head> : onPageDisplay_headClose
      * - <body>  : onPageDisplay_bodyOpen
      * - </body> : onPageDisplay_bodyClose.
-     *
-     * @param Events\PageDisplayEvent $event
      */
-    public function onPageDisplay(Events\PageDisplayEvent $event)
+    public function onPageDisplay(Events\PageDisplayEvent $event): void
     {
         $content = $event->getContent();
 
@@ -147,7 +102,7 @@ class PageSubscriber extends CommonSubscriber
         $bodyOpenScripts = ob_get_clean();
 
         if ($bodyOpenScripts) {
-            preg_match('/(<body[a-z=\s\-_:"\']*>)/i', $content, $matches);
+            preg_match('/(<body[^>]*>)/i', $content, $matches);
 
             $content = str_ireplace($matches[0], $matches[0]."\n".$bodyOpenScripts, $content);
         }
@@ -178,61 +133,73 @@ class PageSubscriber extends CommonSubscriber
         $event->setContent($content);
     }
 
-    /**
-     * @param QueueConsumerEvent $event
-     */
-    public function onPageHit(QueueConsumerEvent $event)
+    public function managePageDraft(PageEditSubmitEvent $event): void
     {
-        $payload                = $event->getPayload();
-        $request                = $payload['request'];
-        $trackingNewlyGenerated = $payload['isNew'];
-        $hitId                  = $payload['hitId'];
-        $pageId                 = $payload['pageId'];
-        $leadId                 = $payload['leadId'];
-        $isRedirect             = !empty($payload['isRedirect']);
-        $hitRepo                = $this->em->getRepository('MauticPageBundle:Hit');
-        $pageRepo               = $this->em->getRepository('MauticPageBundle:Page');
-        $redirectRepo           = $this->em->getRepository('MauticPageBundle:Redirect');
-        $leadRepo               = $this->em->getRepository('MauticLeadBundle:Lead');
-        $hit                    = $hitId ? $hitRepo->find((int) $hitId) : null;
-        $lead                   = $leadId ? $leadRepo->find((int) $leadId) : null;
+        $livePage   = $event->getPreviousPage();
+        $editedPage = $event->getCurrentPage();
 
-        // On the off chance that the queue contains a message which does not
-        // reference a valid Hit or Lead, discard it to avoid clogging the queue.
-        if (null === $hit || null === $lead) {
-            $event->setResult(QueueConsumerResults::REJECT);
+        if (
+            ($event->isSaveAndClose() || $event->isApply())
+            && $editedPage->hasDraft()
+        ) {
+            $pageDraft = $editedPage->getDraft();
+            $pageDraft->setHtml($editedPage->getCustomHtml());
+            $pageDraft->setTemplate($editedPage->getTemplate());
+            $editedPage->setCustomHtml($livePage->getCustomHtml());
+            $editedPage->setTemplate($livePage->getTemplate());
+            $this->pageDraftModel->saveDraft($pageDraft);
+            $this->pageModel->saveEntity($editedPage);
+        }
 
-            // Log the rejection with event payload as context.
-            if ($this->logger) {
-                $this->logger->addNotice(
-                    'QUEUE MESSAGE REJECTED: Lead or Hit not found',
-                    $payload
-                );
-            }
+        if ($event->isSaveAsDraft()) {
+            $pageDraft = $this
+                ->pageDraftModel
+                ->createDraft($editedPage, $editedPage->getCustomHtml(), $editedPage->getTemplate());
 
+            $editedPage->setCustomHtml($livePage->getCustomHtml());
+            $editedPage->setTemplate($livePage->getTemplate());
+            $editedPage->setDraft($pageDraft);
+            $this->pageModel->saveEntity($editedPage);
+        }
+
+        if ($event->isDiscardDraft()) {
+            $this->revertPageModifications($livePage, $editedPage);
+            $this->pageDraftModel->deleteDraft($editedPage);
+            $editedPage->setDraft(null);
+            $this->pageModel->saveEntity($editedPage);
+        }
+
+        if ($event->isApplyDraft()) {
+            $this->pageDraftModel->deleteDraft($editedPage);
+            $editedPage->setDraft(null);
+        }
+    }
+
+    public function deletePageDraft(PageEvent $event): void
+    {
+        try {
+            $this->pageDraftModel->deleteDraft($event->getPage());
+        } catch (NotFoundHttpException) {
+            // No associated draft found for deletion. We have nothing to do here. Return.
             return;
         }
+    }
 
-        if ($isRedirect) {
-            $page = $pageId ? $redirectRepo->find((int) $pageId) : null;
-        } else {
-            $page = $pageId ? $pageRepo->find((int) $pageId) : null;
-        }
-
-        // Also reject messages when processing causes any other exception.
-        try {
-            $this->pageModel->processPageHit($hit, $page, $request, $lead, $trackingNewlyGenerated, false);
-            $event->setResult(QueueConsumerResults::ACKNOWLEDGE);
-        } catch (\Exception $e) {
-            $event->setResult(QueueConsumerResults::REJECT);
-
-            // Log the exception with event payload as context.
-            if ($this->logger) {
-                $this->logger->addError(
-                    'QUEUE CONSUMER ERROR ('.QueueEvents::PAGE_HIT.'): '.$e->getMessage(),
-                    $payload
-                );
+    private function revertPageModifications(Page $livePage, Page $editedPage): void
+    {
+        $livePageReflection   = new \ReflectionObject($livePage);
+        $editedPageReflection = new \ReflectionObject($editedPage);
+        foreach ($livePageReflection->getProperties() as $property) {
+            if ('id' == $property->getName()) {
+                continue;
             }
+
+            $property->setAccessible(true);
+            $name                = $property->getName();
+            $value               = $property->getValue($livePage);
+            $editedPageProperty  = $editedPageReflection->getProperty($name);
+            $editedPageProperty->setAccessible(true);
+            $editedPageProperty->setValue($editedPage, $value);
         }
     }
 }

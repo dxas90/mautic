@@ -1,28 +1,17 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace MauticPlugin\MauticCrmBundle\Api;
 
 use Mautic\PluginBundle\Exception\ApiErrorException;
 use MauticPlugin\MauticCrmBundle\Integration\ConnectwiseIntegration;
 
 /**
- * Class ConnectwiseApi.
- *
  * @property ConnectwiseIntegration $integration
  */
 class ConnectwiseApi extends CrmApi
 {
     /**
-     * @param        $endpoint
+     * @param string $endpoint
      * @param array  $parameters
      * @param string $method
      *
@@ -40,7 +29,7 @@ class ConnectwiseApi extends CrmApi
             $url,
             $parameters,
             $method,
-            ['encode_parameters' => 'json', 'cw-app-id' => $this->integration->getCompanyCookieKey()]
+            ['encode_parameters' => 'json']
         );
 
         $errors = [];
@@ -56,6 +45,7 @@ class ConnectwiseApi extends CrmApi
                         break;
                     case 'errors':
                         $errors[] = $response['message'];
+                        // no break
                     case 'code':
                         $errors[] = $response['message'];
                         break;
@@ -70,8 +60,7 @@ class ConnectwiseApi extends CrmApi
     }
 
     /**
-     * @param array $params
-     * @param int   $page
+     * @param int $page
      *
      * @return mixed|string
      *
@@ -83,7 +72,7 @@ class ConnectwiseApi extends CrmApi
             'page'     => $page,
             'pageSize' => ConnectwiseIntegration::PAGESIZE,
         ];
-        $conditions = isset($params['conditions']) ? $params['conditions'] : [];
+        $conditions = $params['conditions'] ?? [];
 
         if (isset($params['start'])) {
             $conditions[] = 'lastUpdated > ['.$params['start'].']';
@@ -97,8 +86,7 @@ class ConnectwiseApi extends CrmApi
     }
 
     /**
-     * @param array $params
-     * @param int   $page
+     * @param int $page
      *
      * @return mixed|string
      *
@@ -127,8 +115,6 @@ class ConnectwiseApi extends CrmApi
     }
 
     /**
-     * @param array $params
-     *
      * @return mixed|string
      *
      * @throws ApiErrorException
@@ -139,9 +125,6 @@ class ConnectwiseApi extends CrmApi
     }
 
     /**
-     * @param array $params
-     * @param       $id
-     *
      * @return mixed|string
      *
      * @throws ApiErrorException
@@ -152,17 +135,14 @@ class ConnectwiseApi extends CrmApi
     }
 
     /**
-     * @return array
-     *
      * @throws ApiErrorException
      */
-    public function getCampaigns()
+    public function getCampaigns(): array
     {
         return $this->fetchAllRecords('marketing/groups');
     }
 
     /**
-     * @param     $campaignId
      * @param int $page
      *
      * @return mixed|string
@@ -177,11 +157,9 @@ class ConnectwiseApi extends CrmApi
     /**
      * https://{connectwiseSite}/v4_6_release/apis/3.0/sales/activities/types.
      *
-     * @return array
-     *
      * @throws ApiErrorException
      */
-    public function getActivityTypes()
+    public function getActivityTypes(): array
     {
         return $this->fetchAllRecords('sales/activities/types');
     }
@@ -199,23 +177,17 @@ class ConnectwiseApi extends CrmApi
     }
 
     /**
-     * @return array
-     *
      * @throws ApiErrorException
      */
-    public function getMembers()
+    public function getMembers(): array
     {
         return $this->fetchAllRecords('system/members');
     }
 
     /**
-     * @param $endpoint
-     *
-     * @return array
-     *
      * @throws ApiErrorException
      */
-    public function fetchAllRecords($endpoint)
+    public function fetchAllRecords($endpoint): array
     {
         $page        = 1;
         $pageSize    = ConnectwiseIntegration::PAGESIZE;

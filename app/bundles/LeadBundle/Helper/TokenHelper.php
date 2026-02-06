@@ -1,24 +1,18 @@
 <?php
 
-/*
- * @copyright   2016 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Helper;
 
 use Mautic\CoreBundle\Helper\DateTimeHelper;
 use Mautic\CoreBundle\Helper\ParamsLoaderHelper;
+use Mautic\LeadBundle\Entity\LeadRepository;
 
-/**
- * Class TokenHelper.
- */
 class TokenHelper
 {
+    /**
+     * @const REGEX
+     */
+    public const REGEX = '/({|%7B)contactfield=(.*?)(}|%7D)/';
+
     /**
      * @var array
      */
@@ -39,31 +33,36 @@ class TokenHelper
         }
 
         // Search for bracket or bracket encoded
-        // @deprecated BC support for leadfield
-        $tokenRegex = [
-            '/({|%7B)leadfield=(.*?)(}|%7D)/',
-            '/({|%7B)contactfield=(.*?)(}|%7D)/',
-        ];
-        $tokenList  = [];
+        $tokenList        = [];
+        $foundMatches     = preg_match_all(self::REGEX, $content, $matches);
+        $foundDateMatches = preg_match_all('/({|%7B)datetime=(.*?)(}|%7D)/', $content, $dateMatches);
 
-        foreach ($tokenRegex as $regex) {
-            $foundMatches = preg_match_all($regex, $content, $matches);
-            if ($foundMatches) {
-                foreach ($matches[2] as $key => $match) {
-                    $token = $matches[0][$key];
+        if ($foundMatches || $foundDateMatches) {
+            foreach ($matches[2] as $key => $match) {
+                $token = $matches[0][$key];
 
-                    if (isset($tokenList[$token])) {
-                        continue;
-                    }
-
-                    $alias             = self::getFieldAlias($match);
-                    $defaultValue      = self::getTokenDefaultValue($match);
-                    $tokenList[$token] = self::getTokenValue($lead, $alias, $defaultValue);
+                if (isset($tokenList[$token])) {
+                    continue;
                 }
 
-                if ($replace) {
-                    $content = str_replace(array_keys($tokenList), $tokenList, $content);
+                $alias             = self::getFieldAlias($match);
+                $defaultValue      = self::getTokenDefaultValue($match);
+                $tokenList[$token] = self::getTokenValue($lead, $alias, $defaultValue);
+            }
+
+            foreach ($dateMatches[2] as $key => $match) {
+                $token = $dateMatches[0][$key];
+
+                if (isset($tokenList[$token])) {
+                    continue;
                 }
+
+                $dt                = new DateTimeHelper($match);
+                $tokenList[$token] = $dt->toLocalString(DateTimeHelper::FORMAT_DB);
+            }
+
+            if ($replace) {
+                $content = str_replace(array_keys($tokenList), $tokenList, $content);
             }
         }
 
@@ -88,10 +87,6 @@ class TokenHelper
     }
 
     /**
-     * @param array $lead
-     * @param       $alias
-     * @param       $defaultValue
-     *
      * @return mixed
      */
     private static function getTokenValue(array $lead, $alias, $defaultValue)
@@ -99,12 +94,19 @@ class TokenHelper
         $value = '';
         if (isset($lead[$alias])) {
             $value = $lead[$alias];
-        } elseif (isset($lead['companies'][0][$alias])) {
-            $value = $lead['companies'][0][$alias];
+        } elseif (!empty($lead['companies'])) {
+            foreach ($lead['companies'] as $company) {
+                if (isset($company['is_primary'], $company[$alias]) && 1 === (int) $company['is_primary']) {
+                    $value = $company[$alias];
+                    break;
+                }
+            }
         }
-
-        if ($value) {
+        if ('' !== $value) {
             switch ($defaultValue) {
+                case 'label':
+                    $value = self::getNormalizeValue($alias, $value);
+                    break;
                 case 'true':
                     $value = urlencode($value);
                     break;
@@ -132,20 +134,14 @@ class TokenHelper
                     break;
             }
         }
-        if (in_array($defaultValue, ['true', 'date', 'time', 'datetime'])) {
+        if (in_array($defaultValue, ['true', 'date', 'time', 'datetime', 'label'])) {
             return $value;
         } else {
-            return $value ?: $defaultValue;
+            return '' !== $value ? $value : $defaultValue;
         }
     }
 
-    /**
-     * @param $match
-     * @param $urlencode
-     *
-     * @return string
-     */
-    private static function getTokenDefaultValue($match)
+    private static function getTokenDefaultValue($match): string
     {
         $fallbackCheck = explode('|', $match);
         if (!isset($fallbackCheck[1])) {
@@ -155,12 +151,7 @@ class TokenHelper
         return $fallbackCheck[1];
     }
 
-    /**
-     * @param $match
-     *
-     * @return mixed
-     */
-    private static function getFieldAlias($match)
+    private static function getFieldAlias($match): string
     {
         $fallbackCheck = explode('|', $match);
 
@@ -179,5 +170,17 @@ class TokenHelper
         }
 
         return self::$parameters[$parameter];
+    }
+
+    /**
+     * @param mixed $value
+     *
+     * @return mixed|string
+     */
+    private static function getNormalizeValue(string $alias, $value)
+    {
+        $field = array_merge(LeadRepository::getLeadFieldRepository()->getFields()[$alias], ['value' => $value]);
+
+        return CustomFieldValueHelper::normalizeValue($field);
     }
 }

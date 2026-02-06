@@ -1,19 +1,11 @@
 <?php
 
-/*
- * @copyright   2016 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Entity;
 
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
+use Mautic\LeadBundle\Field\SchemaDefinition;
 use Mautic\LeadBundle\Helper\CustomFieldHelper;
-use Mautic\LeadBundle\Model\FieldModel;
+use Mautic\LeadBundle\Helper\CustomFieldValueHelper;
 
 trait CustomFieldEntityTrait
 {
@@ -33,15 +25,13 @@ trait CustomFieldEntityTrait
 
     /**
      * A place events can use to pass data around on the object to prevent issues like creating a contact and having it processed to be sent back
-     * to the origin of creation in a webhook (like Pipedrive).
+     * to the origin of creation in a webhook.
      *
      * @var array
      */
     protected $eventData = [];
 
     /**
-     * @param $name
-     *
      * @return bool
      */
     public function __get($name)
@@ -50,9 +40,6 @@ trait CustomFieldEntityTrait
     }
 
     /**
-     * @param $name
-     * @param $value
-     *
      * @return $this
      */
     public function __set($name, $value)
@@ -62,14 +49,13 @@ trait CustomFieldEntityTrait
 
     /**
      * @param string $name
-     * @param        $arguments
      *
      * @return mixed
      */
     public function __call($name, $arguments)
     {
-        $isSetter = strpos($name, 'set') === 0;
-        $isGetter = strpos($name, 'get') === 0;
+        $isSetter = str_starts_with($name, 'set');
+        $isGetter = str_starts_with($name, 'get');
 
         if (($isSetter && array_key_exists(0, $arguments)) || $isGetter) {
             $fieldRequested = mb_strtolower(mb_substr($name, 3));
@@ -83,12 +69,9 @@ trait CustomFieldEntityTrait
         return parent::__call($name, $arguments);
     }
 
-    /**
-     * @param $fields
-     */
-    public function setFields($fields)
+    public function setFields($fields): void
     {
-        $this->fields = $fields;
+        $this->fields = CustomFieldValueHelper::normalizeValues($fields);
     }
 
     /**
@@ -100,7 +83,7 @@ trait CustomFieldEntityTrait
     {
         if ($ungroup && isset($this->fields['core'])) {
             $return = [];
-            foreach ($this->fields as $group => $fields) {
+            foreach ($this->fields as $fields) {
                 $return += $fields;
             }
 
@@ -113,8 +96,6 @@ trait CustomFieldEntityTrait
     /**
      * Add an updated field to persist to the DB and to note changes.
      *
-     * @param        $alias
-     * @param        $value
      * @param string $oldValue
      *
      * @return $this
@@ -139,7 +120,7 @@ trait CustomFieldEntityTrait
         if (property_exists($this, $property) && method_exists($this, $setter)) {
             // Fixed custom field so use the setter but don't get caught in a loop such as a custom field called "notes"
             // Set empty value as null
-            if ($value === '') {
+            if ('' === $value) {
                 $value = null;
             }
             $this->$setter($value);
@@ -183,10 +164,8 @@ trait CustomFieldEntityTrait
     }
 
     /**
-     * Get field value.
-     *
-     * @param string $field
-     * @param string $group
+     * @param string      $field
+     * @param string|null $group
      *
      * @return mixed
      */
@@ -225,7 +204,7 @@ trait CustomFieldEntityTrait
             return $this->fields[$group][$key];
         }
 
-        foreach ($this->fields as $group => $groupFields) {
+        foreach ($this->fields as $groupFields) {
             foreach ($groupFields as $name => $details) {
                 if ($name == $key) {
                     return $details;
@@ -237,9 +216,7 @@ trait CustomFieldEntityTrait
     }
 
     /**
-     * Get profile values.
-     *
-     * @return array
+     * @return mixed[]
      */
     public function getProfileFields()
     {
@@ -249,6 +226,10 @@ trait CustomFieldEntityTrait
             ];
 
             foreach ($this->fields as $group => $fields) {
+                if ('all' === $group) {
+                    continue;
+                }
+
                 foreach ($fields as $alias => $field) {
                     $fieldValues[$alias] = $field['value'];
                 }
@@ -262,26 +243,17 @@ trait CustomFieldEntityTrait
         }
     }
 
-    /**
-     * @return bool
-     */
-    public function hasFields()
+    public function hasFields(): bool
     {
         return !empty($this->fields);
     }
 
-    /**
-     * @param $key
-     */
     public function getEventData($key)
     {
-        return (isset($this->eventData[$key])) ? $this->eventData[$key] : null;
+        return $this->eventData[$key] ?? null;
     }
 
     /**
-     * @param $key
-     * @param $value
-     *
      * @return $this
      */
     public function setEventData($key, $value)
@@ -291,11 +263,6 @@ trait CustomFieldEntityTrait
         return $this;
     }
 
-    /**
-     * @param ClassMetadataBuilder $builder
-     * @param array                $fields
-     * @param array                $customFieldDefinitions
-     */
     protected static function loadFixedFieldMetadata(ClassMetadataBuilder $builder, array $fields, array $customFieldDefinitions)
     {
         foreach ($fields as $fieldProperty) {
@@ -308,7 +275,7 @@ trait CustomFieldEntityTrait
 
             $builder->addNamedField(
                 $fieldProperty,
-                FieldModel::getSchemaDefinition($field, $type, !empty($customFieldDefinitions[$field]['unique']))['type'],
+                SchemaDefinition::getSchemaDefinition($field, $type, !empty($customFieldDefinitions[$field]['unique']))['type'],
                 $field,
                 true
             );

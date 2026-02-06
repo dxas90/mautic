@@ -1,57 +1,27 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Executioner\ContactFinder;
 
 use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Mautic\CampaignBundle\Entity\CampaignRepository;
 use Mautic\CampaignBundle\Executioner\ContactFinder\Limiter\ContactLimiter;
 use Mautic\CampaignBundle\Executioner\Exception\NoContactsFoundException;
+use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Entity\LeadRepository;
 use Psr\Log\LoggerInterface;
 
 class KickoffContactFinder
 {
-    /**
-     * @var LeadRepository
-     */
-    private $leadRepository;
-
-    /**
-     * @var CampaignRepository
-     */
-    private $campaignRepository;
-
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-
-    /**
-     * KickoffContactFinder constructor.
-     *
-     * @param LeadRepository     $leadRepository
-     * @param CampaignRepository $campaignRepository
-     * @param LoggerInterface    $logger
-     */
-    public function __construct(LeadRepository $leadRepository, CampaignRepository $campaignRepository, LoggerInterface $logger)
-    {
-        $this->leadRepository     = $leadRepository;
-        $this->campaignRepository = $campaignRepository;
-        $this->logger             = $logger;
+    public function __construct(
+        private LeadRepository $leadRepository,
+        private CampaignRepository $campaignRepository,
+        private LoggerInterface $logger,
+    ) {
     }
 
     /**
-     * @param int            $campaignId
-     * @param ContactLimiter $limiter
+     * @param int $campaignId
      *
      * @return ArrayCollection
      *
@@ -84,13 +54,9 @@ class KickoffContactFinder
     }
 
     /**
-     * @param int            $campaignId
-     * @param array          $eventIds
-     * @param ContactLimiter $limiter
-     *
-     * @return int
+     * @param int $campaignId
      */
-    public function getContactCount($campaignId, array $eventIds, ContactLimiter $limiter)
+    public function getContactCount($campaignId, array $eventIds, ContactLimiter $limiter): int
     {
         $countResult = $this->campaignRepository->getCountsForPendingContacts($campaignId, $eventIds, $limiter);
 
@@ -99,9 +65,11 @@ class KickoffContactFinder
 
     /**
      * Clear Lead entities from memory.
+     *
+     * @param Collection<int, Lead> $contacts
      */
-    public function clear()
+    public function clear(Collection $contacts): void
     {
-        $this->leadRepository->clear();
+        $this->leadRepository->detachEntities($contacts->toArray());
     }
 }

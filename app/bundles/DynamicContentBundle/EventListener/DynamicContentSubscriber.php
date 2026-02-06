@@ -1,22 +1,11 @@
 <?php
 
-/*
- * @copyright   2016 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\DynamicContentBundle\EventListener;
 
-use DOMDocument;
-use DOMXPath;
 use Mautic\AssetBundle\Helper\TokenHelper as AssetTokenHelper;
 use Mautic\CoreBundle\Event as MauticEvents;
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
 use Mautic\CoreBundle\Model\AuditLogModel;
+use Mautic\CoreBundle\Security\Permissions\CorePermissions;
 use Mautic\DynamicContentBundle\DynamicContentEvents;
 use Mautic\DynamicContentBundle\Entity\DynamicContent;
 use Mautic\DynamicContentBundle\Event as Events;
@@ -25,106 +14,38 @@ use Mautic\DynamicContentBundle\Model\DynamicContentModel;
 use Mautic\EmailBundle\EventListener\MatchFilterForLeadTrait;
 use Mautic\FormBundle\Helper\TokenHelper as FormTokenHelper;
 use Mautic\LeadBundle\Entity\Lead;
+use Mautic\LeadBundle\Exception\PrimaryCompanyNotFoundException;
 use Mautic\LeadBundle\Helper\TokenHelper;
-use Mautic\LeadBundle\Model\LeadModel;
+use Mautic\LeadBundle\Model\CompanyModel;
+use Mautic\LeadBundle\Tracker\ContactTracker;
 use Mautic\PageBundle\Entity\Trackable;
 use Mautic\PageBundle\Event\PageDisplayEvent;
 use Mautic\PageBundle\Helper\TokenHelper as PageTokenHelper;
 use Mautic\PageBundle\Model\TrackableModel;
 use Mautic\PageBundle\PageEvents;
 use MauticPlugin\MauticFocusBundle\Helper\TokenHelper as FocusTokenHelper;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
-/**
- * Class DynamicContentSubscriber.
- */
-class DynamicContentSubscriber extends CommonSubscriber
+class DynamicContentSubscriber implements EventSubscriberInterface
 {
     use MatchFilterForLeadTrait;
 
-    /**
-     * @var TrackableModel
-     */
-    protected $trackableModel;
-
-    /**
-     * @var PageTokenHelper
-     */
-    protected $pageTokenHelper;
-
-    /**
-     * @var AssetTokenHelper
-     */
-    protected $assetTokenHelper;
-
-    /**
-     * @var FormTokenHelper
-     */
-    protected $formTokenHelper;
-
-    /**
-     * @var FocusTokenHelper
-     */
-    protected $focusTokenHelper;
-
-    /**
-     * @var AuditLogModel
-     */
-    protected $auditLogModel;
-
-    /**
-     * @var LeadModel
-     */
-    private $leadModel;
-
-    /**
-     * @var DynamicContentHelper
-     */
-    private $dynamicContentHelper;
-
-    /**
-     * @var DynamicContentModel
-     */
-    private $dynamicContentModel;
-
-    /**
-     * DynamicContentSubscriber constructor.
-     *
-     * @param TrackableModel       $trackableModel
-     * @param PageTokenHelper      $pageTokenHelper
-     * @param AssetTokenHelper     $assetTokenHelper
-     * @param FormTokenHelper      $formTokenHelper
-     * @param FocusTokenHelper     $focusTokenHelper
-     * @param AuditLogModel        $auditLogModel
-     * @param LeadModel            $leadModel
-     * @param DynamicContentHelper $dynamicContentHelper
-     * @param DynamicContentModel  $dynamicContentModel
-     */
     public function __construct(
-        TrackableModel $trackableModel,
-        PageTokenHelper $pageTokenHelper,
-        AssetTokenHelper $assetTokenHelper,
-        FormTokenHelper $formTokenHelper,
-        FocusTokenHelper $focusTokenHelper,
-        AuditLogModel $auditLogModel,
-        LeadModel $leadModel,
-        DynamicContentHelper $dynamicContentHelper,
-        DynamicContentModel $dynamicContentModel
+        private TrackableModel $trackableModel,
+        private PageTokenHelper $pageTokenHelper,
+        private AssetTokenHelper $assetTokenHelper,
+        private FormTokenHelper $formTokenHelper,
+        private FocusTokenHelper $focusTokenHelper,
+        private AuditLogModel $auditLogModel,
+        private DynamicContentHelper $dynamicContentHelper,
+        private DynamicContentModel $dynamicContentModel,
+        private CorePermissions $security,
+        private ContactTracker $contactTracker,
+        private CompanyModel $companyModel,
     ) {
-        $this->trackableModel       = $trackableModel;
-        $this->pageTokenHelper      = $pageTokenHelper;
-        $this->assetTokenHelper     = $assetTokenHelper;
-        $this->formTokenHelper      = $formTokenHelper;
-        $this->focusTokenHelper     = $focusTokenHelper;
-        $this->auditLogModel        = $auditLogModel;
-        $this->leadModel            = $leadModel;
-        $this->dynamicContentHelper = $dynamicContentHelper;
-        $this->dynamicContentModel  = $dynamicContentModel;
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             DynamicContentEvents::POST_SAVE         => ['onPostSave', 0],
@@ -136,10 +57,8 @@ class DynamicContentSubscriber extends CommonSubscriber
 
     /**
      * Add an entry to the audit log.
-     *
-     * @param Events\DynamicContentEvent $event
      */
-    public function onPostSave(Events\DynamicContentEvent $event)
+    public function onPostSave(Events\DynamicContentEvent $event): void
     {
         $entity = $event->getDynamicContent();
         if ($details = $event->getChanges()) {
@@ -156,10 +75,8 @@ class DynamicContentSubscriber extends CommonSubscriber
 
     /**
      * Add a delete entry to the audit log.
-     *
-     * @param Events\DynamicContentEvent $event
      */
-    public function onDelete(Events\DynamicContentEvent $event)
+    public function onDelete(Events\DynamicContentEvent $event): void
     {
         $entity = $event->getDynamicContent();
         $log    = [
@@ -172,26 +89,29 @@ class DynamicContentSubscriber extends CommonSubscriber
         $this->auditLogModel->writeToLog($log);
     }
 
-    /**
-     * @param MauticEvents\TokenReplacementEvent $event
-     */
-    public function onTokenReplacement(MauticEvents\TokenReplacementEvent $event)
+    public function onTokenReplacement(MauticEvents\TokenReplacementEvent $event): void
     {
         /** @var Lead $lead */
         $lead         = $event->getLead();
         $content      = $event->getContent();
         $clickthrough = $event->getClickthrough();
 
-        if ($content) {
+        if ($lead instanceof Lead && $content) {
+            $leadArray = $lead->getProfileFields();
+            try {
+                $primaryCompany         = $this->companyModel->getCompanyLeadRepository()->getPrimaryCompanyByLeadId($lead->getId());
+                $leadArray['companies'] = [$primaryCompany];
+            } catch (PrimaryCompanyNotFoundException) {
+            }
             $tokens = array_merge(
-                TokenHelper::findLeadTokens($content, $lead->getProfileFields()),
+                TokenHelper::findLeadTokens($content, $leadArray),
                 $this->pageTokenHelper->findPageTokens($content, $clickthrough),
                 $this->assetTokenHelper->findAssetTokens($content, $clickthrough),
                 $this->formTokenHelper->findFormTokens($content),
                 $this->focusTokenHelper->findFocusTokens($content)
             );
 
-            list($content, $trackables) = $this->trackableModel->parseContentForTrackables(
+            [$content, $trackables] = $this->trackableModel->parseContentForTrackables(
                 $content,
                 $tokens,
                 'dynamicContent',
@@ -205,7 +125,7 @@ class DynamicContentSubscriber extends CommonSubscriber
             }
 
             /**
-             * @var string
+             * @var string    $token
              * @var Trackable $trackable
              */
             foreach ($trackables as $token => $trackable) {
@@ -218,12 +138,12 @@ class DynamicContentSubscriber extends CommonSubscriber
         }
     }
 
-    /**
-     * @param PageDisplayEvent $event
-     */
-    public function decodeTokens(PageDisplayEvent $event)
+    public function decodeTokens(PageDisplayEvent $event): void
     {
-        $lead = $this->security->isAnonymous() ? $this->leadModel->getCurrentLead() : null;
+        if (!$lead = $event->getLead()) {
+            $lead = $this->security->isAnonymous() ? $this->contactTracker->getContact() : null;
+        }
+
         if (!$lead) {
             return;
         }
@@ -233,28 +153,20 @@ class DynamicContentSubscriber extends CommonSubscriber
             return;
         }
 
-        $tokens    = $this->dynamicContentHelper->findDwcTokens($content, $lead);
-        $leadArray = [];
-        if ($lead instanceof Lead) {
-            $leadArray = $this->dynamicContentHelper->convertLeadToArray($lead);
-        }
-        $result = [];
-        foreach ($tokens as $token => $dwc) {
-            $result[$token] = '';
-            if ($this->matchFilterForLead($dwc['filters'], $leadArray)) {
-                $result[$token] = $dwc['content'];
-            }
-        }
-        $content = str_replace(array_keys($result), array_values($result), $content);
+        $tokens = $this->dynamicContentHelper->findDwcTokens($content, $lead);
 
         // replace slots
-        $dom = new DOMDocument('1.0', 'utf-8');
-        $dom->loadHTML(mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8'), LIBXML_NOERROR);
-        $xpath = new DOMXPath($dom);
+        $dom = new \DOMDocument('1.0', 'utf-8');
+        $dom->loadHTML(mb_encode_numericentity($content, [0x80, 0x10FFFF, 0, 0xFFFFF], 'UTF-8'), LIBXML_NOERROR);
+        $xpath = new \DOMXPath($dom);
 
-        $divContent = $xpath->query('//*[@data-slot="dwc"]');
-        for ($i = 0; $i < $divContent->length; ++$i) {
-            $slot = $divContent->item($i);
+        $contentSlots = $xpath->query('//*[@data-slot="dwc"]');
+
+        for ($i = 0; $i < $contentSlots->length; ++$i) {
+            $slot = $contentSlots->item($i);
+            if (!$slot instanceof \DOMElement) {
+                continue;
+            }
             if (!$slotName = $slot->getAttribute('data-param-slot-name')) {
                 continue;
             }
@@ -264,11 +176,21 @@ class DynamicContentSubscriber extends CommonSubscriber
             }
 
             $newnode = $dom->createDocumentFragment();
-            $newnode->appendXML('<![CDATA['.mb_convert_encoding($slotContent, 'HTML-ENTITIES', 'UTF-8').']]>');
-            $slot->parentNode->replaceChild($newnode, $slot);
+            $newnode->appendXML('<![CDATA['.mb_encode_numericentity($slotContent, [0x80, 0x10FFFF, 0, 0xFFFFF], 'UTF-8').']]>');
+            if ($slot->parentNode instanceof \DOMNode) {
+                $slot->parentNode->replaceChild($newnode, $slot);
+            }
         }
 
         $content = $dom->saveHTML();
+
+        // These tokens need to be replaced after the content, because otherwise the replaced tokens will have encoded
+        // HTML entities, which do not conform the tests.
+        $result = [];
+        foreach ($tokens as $token => $dwc) {
+            $result[$token] = $dwc['content'];
+        }
+        $content = str_replace(array_keys($result), array_values($result), $content);
 
         $event->setContent($content);
     }

@@ -1,64 +1,32 @@
 <?php
 
-/*
- * @copyright   2016 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\DynamicContentBundle\EventListener;
 
+use Mautic\CacheBundle\Cache\CacheProvider;
 use Mautic\CampaignBundle\CampaignEvents;
 use Mautic\CampaignBundle\Event\CampaignBuilderEvent;
 use Mautic\CampaignBundle\Event\CampaignExecutionEvent;
 use Mautic\CoreBundle\Event\TokenReplacementEvent;
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
 use Mautic\DynamicContentBundle\DynamicContentEvents;
 use Mautic\DynamicContentBundle\Entity\DynamicContent;
+use Mautic\DynamicContentBundle\Form\Type\DynamicContentDecisionType;
+use Mautic\DynamicContentBundle\Form\Type\DynamicContentSendType;
 use Mautic\DynamicContentBundle\Model\DynamicContentModel;
-use Mautic\LeadBundle\Model\LeadModel;
-use Symfony\Component\HttpFoundation\Session\Session;
+use Psr\Cache\CacheItemInterface;
+use Psr\Cache\InvalidArgumentException;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
-/**
- * Class CampaignSubscriber.
- */
-class CampaignSubscriber extends CommonSubscriber
+class CampaignSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var LeadModel
-     */
-    protected $leadModel;
-
-    /**
-     * @var DynamicContentModel
-     */
-    protected $dynamicContentModel;
-
-    /**
-     * @var Session
-     */
-    protected $session;
-
-    /**
-     * CampaignSubscriber constructor.
-     *
-     * @param LeadModel           $leadModel
-     * @param DynamicContentModel $dynamicContentModel
-     */
-    public function __construct(LeadModel $leadModel, DynamicContentModel $dynamicContentModel, Session $session)
-    {
-        $this->leadModel           = $leadModel;
-        $this->dynamicContentModel = $dynamicContentModel;
-        $this->session             = $session;
+    public function __construct(
+        private DynamicContentModel $dynamicContentModel,
+        protected CacheProvider $cache,
+        private EventDispatcherInterface $dispatcher,
+    ) {
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             CampaignEvents::CAMPAIGN_ON_BUILD                  => ['onCampaignBuild', 0],
@@ -67,7 +35,7 @@ class CampaignSubscriber extends CommonSubscriber
         ];
     }
 
-    public function onCampaignBuild(CampaignBuilderEvent $event)
+    public function onCampaignBuild(CampaignBuilderEvent $event): void
     {
         $event->addAction(
             'dwc.push_content',
@@ -75,10 +43,10 @@ class CampaignSubscriber extends CommonSubscriber
                 'label'                  => 'mautic.dynamicContent.campaign.send_dwc',
                 'description'            => 'mautic.dynamicContent.campaign.send_dwc.tooltip',
                 'eventName'              => DynamicContentEvents::ON_CAMPAIGN_TRIGGER_ACTION,
-                'formType'               => 'dwcsend_list',
+                'formType'               => DynamicContentSendType::class,
                 'formTypeOptions'        => ['update_select' => 'campaignevent_properties_dynamicContent'],
-                'formTheme'              => 'MauticDynamicContentBundle:FormTheme\DynamicContentPushList',
-                'timelineTemplate'       => 'MauticDynamicContentBundle:SubscribedEvents\Timeline:index.html.php',
+                'formTheme'              => '@MauticDynamicContent/FormTheme/DynamicContentPushList/_dynamiccontentpush_list_row.html.twig',
+                'timelineTemplate'       => '@MauticDynamicContent/SubscribedEvents/Timeline/index.html.twig',
                 'hideTriggerMode'        => true,
                 'connectionRestrictions' => [
                     'anchor' => [
@@ -101,9 +69,9 @@ class CampaignSubscriber extends CommonSubscriber
                 'label'           => 'mautic.dynamicContent.campaign.decision_dwc',
                 'description'     => 'mautic.dynamicContent.campaign.decision_dwc.tooltip',
                 'eventName'       => DynamicContentEvents::ON_CAMPAIGN_TRIGGER_DECISION,
-                'formType'        => 'dwcdecision_list',
+                'formType'        => DynamicContentDecisionType::class,
                 'formTypeOptions' => ['update_select' => 'campaignevent_properties_dynamicContent'],
-                'formTheme'       => 'MauticDynamicContentBundle:FormTheme\DynamicContentDecisionList',
+                'formTheme'       => '@MauticDynamicContent/FormTheme/DynamicContentDecisionList/_dynamiccontentdecision_list_row.html.twig',
                 'channel'         => 'dynamicContent',
                 'channelIdField'  => 'dynamicContent',
             ]
@@ -111,9 +79,9 @@ class CampaignSubscriber extends CommonSubscriber
     }
 
     /**
-     * @param CampaignExecutionEvent $event
+     * @return false|CampaignExecutionEvent
      *
-     * @return bool|CampaignExecutionEvent
+     * @throws InvalidArgumentException
      */
     public function onCampaignTriggerDecision(CampaignExecutionEvent $event)
     {
@@ -135,36 +103,40 @@ class CampaignSubscriber extends CommonSubscriber
             $this->dynamicContentModel->setSlotContentForLead($defaultDwc, $lead, $eventDetails);
         }
 
-        $this->session->set('dwc.slot_name.lead.'.$lead->getId(), $eventDetails);
+        $item = $this->cache->getItem('dwc.slot_name.lead.'.$lead->getId());
+        $item->set($eventDetails);
+        $item->expiresAfter(86400); // one day in seconds
+        $this->cache->save($item);
 
         $event->stopPropagation();
 
         return $event->setResult(true);
     }
 
-    /**
-     * @param CampaignExecutionEvent $event
-     */
     public function onCampaignTriggerAction(CampaignExecutionEvent $event)
     {
         $eventConfig = $event->getConfig();
         $lead        = $event->getLead();
-        $slot        = $this->session->get('dwc.slot_name.lead.'.$lead->getId());
+        /* @var CacheItemInterface $item */
+        $item = $this->cache->getItem('dwc.slot_name.lead.'.$lead->getId());
+        $slot = $item->get();
 
         $dwc = $this->dynamicContentModel->getRepository()->getEntity($eventConfig['dynamicContent']);
 
         if ($dwc instanceof DynamicContent) {
             // Use translation if available
-            list($ignore, $dwc) = $this->dynamicContentModel->getTranslatedEntity($dwc, $lead);
+            [$ignore, $dwc] = $this->dynamicContentModel->getTranslatedEntity($dwc, $lead);
+            \assert($dwc instanceof DynamicContent);
 
             if ($slot) {
                 $this->dynamicContentModel->setSlotContentForLead($dwc, $lead, $slot);
             }
 
-            $this->dynamicContentModel->createStatEntry($dwc, $lead, $slot);
+            $stat = $this->dynamicContentModel->createStatEntry($dwc, $lead, $slot);
 
             $tokenEvent = new TokenReplacementEvent($dwc->getContent(), $lead, ['slot' => $slot, 'dynamic_content_id' => $dwc->getId()]);
-            $this->dispatcher->dispatch(DynamicContentEvents::TOKEN_REPLACEMENT, $tokenEvent);
+            $tokenEvent->setStat($stat);
+            $this->dispatcher->dispatch($tokenEvent, DynamicContentEvents::TOKEN_REPLACEMENT);
 
             $content = $tokenEvent->getContent();
             $content = preg_replace('#<script(.*?)>(.*?)</script>#is', '', $content);

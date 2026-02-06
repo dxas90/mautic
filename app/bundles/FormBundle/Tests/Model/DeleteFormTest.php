@@ -1,20 +1,18 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
+declare(strict_types=1);
 
 namespace Mautic\FormBundle\Tests\Model;
 
-use Doctrine\ORM\EntityManager;
-use Mautic\CoreBundle\Doctrine\Helper\SchemaHelperFactory;
-use Mautic\CoreBundle\Helper\TemplatingHelper;
-use Mautic\CoreBundle\Helper\ThemeHelper;
+use Doctrine\ORM\EntityManagerInterface;
+use Mautic\CoreBundle\Doctrine\Helper\ColumnSchemaHelper;
+use Mautic\CoreBundle\Doctrine\Helper\TableSchemaHelper;
+use Mautic\CoreBundle\Helper\CoreParametersHelper;
+use Mautic\CoreBundle\Helper\ThemeHelperInterface;
+use Mautic\CoreBundle\Helper\UserHelper;
+use Mautic\CoreBundle\Security\Permissions\CorePermissions;
+use Mautic\CoreBundle\Translation\Translator;
+use Mautic\FormBundle\Collector\MappedObjectCollectorInterface;
 use Mautic\FormBundle\Entity\Form;
 use Mautic\FormBundle\Entity\FormRepository;
 use Mautic\FormBundle\Helper\FormFieldHelper;
@@ -22,115 +20,76 @@ use Mautic\FormBundle\Helper\FormUploader;
 use Mautic\FormBundle\Model\ActionModel;
 use Mautic\FormBundle\Model\FieldModel;
 use Mautic\FormBundle\Model\FormModel;
-use Mautic\FormBundle\Tests\FormTestAbstract;
+use Mautic\LeadBundle\Helper\PrimaryCompanyHelper;
 use Mautic\LeadBundle\Model\FieldModel as LeadFieldModel;
-use Mautic\LeadBundle\Model\LeadModel;
+use Mautic\LeadBundle\Tracker\ContactTracker;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Twig\Environment;
 
-class DeleteFormTest extends FormTestAbstract
+class DeleteFormTest extends \PHPUnit\Framework\TestCase
 {
-    public function testDelete()
+    public function testDelete(): void
     {
-        $requestStack = $this
-            ->getMockBuilder(RequestStack::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $templatingHelperMock = $this
-            ->getMockBuilder(TemplatingHelper::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $themeHelper = $this
-            ->getMockBuilder(ThemeHelper::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $schemaHelperFactory = $this
-            ->getMockBuilder(SchemaHelperFactory::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $formActionModel = $this
-            ->getMockBuilder(ActionModel::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $formFieldModel = $this
-            ->getMockBuilder(FieldModel::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $leadModel = $this
-            ->getMockBuilder(LeadModel::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $fieldHelper = $this
-            ->getMockBuilder(FormFieldHelper::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $leadFieldModel = $this
-            ->getMockBuilder(LeadFieldModel::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $formUploaderMock = $this
-            ->getMockBuilder(FormUploader::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $formModel = new FormModel(
+        $requestStack          = $this->createMock(RequestStack::class);
+        $twigMock              = $this->createMock(Environment::class);
+        $themeHelper           = $this->createMock(ThemeHelperInterface::class);
+        $formActionModel       = $this->createMock(ActionModel::class);
+        $formFieldModel        = $this->createMock(FieldModel::class);
+        $fieldHelper           = $this->createMock(FormFieldHelper::class);
+        $primaryCompanyHelper  = $this->createMock(PrimaryCompanyHelper::class);
+        $leadFieldModel        = $this->createMock(LeadFieldModel::class);
+        $formUploaderMock      = $this->createMock(FormUploader::class);
+        $contactTracker        = $this->createMock(ContactTracker::class);
+        $columnSchemaHelper    = $this->createMock(ColumnSchemaHelper::class);
+        $tableSchemaHelper     = $this->createMock(TableSchemaHelper::class);
+        $entityManager         = $this->createMock(EntityManagerInterface::class);
+        $dispatcher            = $this->createMock(EventDispatcher::class);
+        $formRepository        = $this->createMock(FormRepository::class);
+        $form                  = $this->createMock(Form::class);
+        $mappedObjectCollector = $this->createMock(MappedObjectCollectorInterface::class);
+        $formModel             = new FormModel(
             $requestStack,
-            $templatingHelperMock,
+            $twigMock,
             $themeHelper,
-            $schemaHelperFactory,
             $formActionModel,
             $formFieldModel,
-            $leadModel,
             $fieldHelper,
+            $primaryCompanyHelper,
             $leadFieldModel,
-            $formUploaderMock
+            $formUploaderMock,
+            $contactTracker,
+            $columnSchemaHelper,
+            $tableSchemaHelper,
+            $mappedObjectCollector,
+            $entityManager,
+            $this->createMock(CorePermissions::class),
+            $dispatcher,
+            $this->createMock(UrlGeneratorInterface::class),
+            $this->createMock(Translator::class),
+            $this->createMock(UserHelper::class),
+            $this->createMock(LoggerInterface::class),
+            $this->createMock(CoreParametersHelper::class)
         );
+        $matcher = $this->exactly(2);
 
-        $dispatcher = $this
-            ->getMockBuilder(EventDispatcher::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $dispatcher->expects($matcher)
+            ->method('hasListeners')->willReturnCallback(function (...$parameters) use ($matcher) {
+                if (1 === $matcher->numberOfInvocations()) {
+                    $this->assertSame('mautic.form_pre_delete', $parameters[0]);
+                }
+                if (2 === $matcher->numberOfInvocations()) {
+                    $this->assertSame('mautic.form_post_delete', $parameters[0]);
+                }
 
-        $dispatcher->expects($this->at(0))
-            ->method('hasListeners')
-            ->with('mautic.form_pre_delete')
-            ->willReturn(false);
-
-        $dispatcher->expects($this->at(1))
-            ->method('hasListeners')
-            ->with('mautic.form_post_delete')
-            ->willReturn(false);
-
-        $entityManager = $this
-            ->getMockBuilder(EntityManager::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $formRepository = $this
-            ->getMockBuilder(FormRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+                return false;
+            });
 
         $entityManager->expects($this->once())
             ->method('getRepository')
             ->willReturn($formRepository);
-
-        $formModel->setDispatcher($dispatcher);
-        $formModel->setEntityManager($entityManager);
-
-        $form = $this
-            ->getMockBuilder(Form::class)
-            ->disableOriginalConstructor()
-            ->getMock();
 
         $form->expects($this->exactly(2))
             ->method('getId')

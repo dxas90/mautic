@@ -1,43 +1,23 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\EventListener;
 
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
 use Mautic\LeadBundle\Report\FieldsBuilder;
 use Mautic\ReportBundle\Event\ReportBuilderEvent;
 use Mautic\ReportBundle\Event\ReportGeneratorEvent;
 use Mautic\ReportBundle\ReportEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
-class SegmentReportSubscriber extends CommonSubscriber
+class SegmentReportSubscriber implements EventSubscriberInterface
 {
-    const SEGMENT_MEMBERSHIP = 'segment.membership';
+    public const SEGMENT_MEMBERSHIP = 'segment.membership';
 
-    /**
-     * @var FieldsBuilder
-     */
-    private $fieldsBuilder;
-
-    /**
-     * @param FieldsBuilder $fieldsBuilder
-     */
-    public function __construct(FieldsBuilder $fieldsBuilder)
-    {
-        $this->fieldsBuilder = $fieldsBuilder;
+    public function __construct(
+        private FieldsBuilder $fieldsBuilder,
+    ) {
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             ReportEvents::REPORT_ON_BUILD    => ['onReportBuilder', 0],
@@ -47,10 +27,8 @@ class SegmentReportSubscriber extends CommonSubscriber
 
     /**
      * Add available tables and columns to the report builder lookup.
-     *
-     * @param ReportBuilderEvent $event
      */
-    public function onReportBuilder(ReportBuilderEvent $event)
+    public function onReportBuilder(ReportBuilderEvent $event): void
     {
         if (!$event->checkContext([self::SEGMENT_MEMBERSHIP])) {
             return;
@@ -83,10 +61,8 @@ class SegmentReportSubscriber extends CommonSubscriber
 
     /**
      * Initialize the QueryBuilder object to generate reports from.
-     *
-     * @param ReportGeneratorEvent $event
      */
-    public function onReportGenerate(ReportGeneratorEvent $event)
+    public function onReportGenerate(ReportGeneratorEvent $event): void
     {
         if (!$event->checkContext([self::SEGMENT_MEMBERSHIP])) {
             return;
@@ -98,11 +74,11 @@ class SegmentReportSubscriber extends CommonSubscriber
             ->leftJoin('lll', MAUTIC_TABLE_PREFIX.'lead_lists', 's', 's.id = lll.leadlist_id')
             ->andWhere('lll.manually_removed = 0');
 
-        if ($event->hasColumn(['u.first_name', 'u.last_name']) || $event->hasFilter(['u.first_name', 'u.last_name'])) {
+        if ($event->usesColumn(['u.first_name', 'u.last_name'])) {
             $qb->leftJoin('l', MAUTIC_TABLE_PREFIX.'users', 'u', 'u.id = l.owner_id');
         }
 
-        if ($event->hasColumn('i.ip_address') || $event->hasFilter('i.ip_address')) {
+        if ($event->usesColumn('i.ip_address')) {
             $event->addLeadIpAddressLeftJoin($qb);
         }
 

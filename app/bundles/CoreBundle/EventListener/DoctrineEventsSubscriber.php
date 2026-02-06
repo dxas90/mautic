@@ -1,60 +1,33 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CoreBundle\EventListener;
 
-use Doctrine\Common\EventSubscriber;
+use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\Event\LoadClassMetadataEventArgs;
+use Doctrine\ORM\Events;
 use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
+use Doctrine\ORM\Tools\ToolEvents;
 use Mautic\CoreBundle\Entity\DeprecatedInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
-/**
- * Class DoctrineEventsSubscriber.
- */
-class DoctrineEventsSubscriber implements EventSubscriber
+#[AsDoctrineListener(Events::loadClassMetadata)]
+#[AsDoctrineListener(ToolEvents::postGenerateSchema)]
+class DoctrineEventsSubscriber
 {
-    protected $tablePrefix;
+    private array $deprecatedEntityTables = [];
 
     /**
-     * @var
+     * @param string $tablePrefix
      */
-    protected $deprecatedEntityTables = [];
-
-    /**
-     * DoctrineEventsSubscriber constructor.
-     *
-     * @param $tablePrefix
-     */
-    public function __construct($tablePrefix)
-    {
-        $this->tablePrefix = $tablePrefix;
+    public function __construct(
+        #[Autowire('%mautic.db_table_prefix%')]
+        private $tablePrefix,
+    ) {
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getSubscribedEvents()
+    public function loadClassMetadata(LoadClassMetadataEventArgs $args): void
     {
-        return [
-            'loadClassMetadata',
-            'postGenerateSchema',
-        ];
-    }
-
-    /**
-     * @param LoadClassMetadataEventArgs $args
-     */
-    public function loadClassMetadata(LoadClassMetadataEventArgs $args)
-    {
-        //in the installer
+        // in the installer
         if (!defined('MAUTIC_TABLE_PREFIX') && empty($this->tablePrefix)) {
             return;
         } elseif (empty($this->tablePrefix)) {
@@ -69,8 +42,8 @@ class DoctrineEventsSubscriber implements EventSubscriber
             return;
         }
 
-        if (false !== strpos($classMetadata->namespace, 'Mautic')) {
-            //if in the installer, use the prefix set by it rather than what is cached
+        if (str_contains($classMetadata->namespace, 'Mautic')) {
+            // if in the installer, use the prefix set by it rather than what is cached
 
             // Prefix indexes
             $uniqueConstraints = [];
@@ -97,7 +70,7 @@ class DoctrineEventsSubscriber implements EventSubscriber
             );
 
             foreach ($classMetadata->getAssociationMappings() as $fieldName => $mapping) {
-                if ($mapping['type'] == \Doctrine\ORM\Mapping\ClassMetadataInfo::MANY_TO_MANY
+                if (\Doctrine\ORM\Mapping\ClassMetadataInfo::MANY_TO_MANY == $mapping['type']
                     && isset($classMetadata->associationMappings[$fieldName]['joinTable']['name'])
                 ) {
                     $mappedTableName                                                     = $classMetadata->associationMappings[$fieldName]['joinTable']['name'];
@@ -132,10 +105,7 @@ class DoctrineEventsSubscriber implements EventSubscriber
         }
     }
 
-    /**
-     * @param GenerateSchemaEventArgs $args
-     */
-    public function postGenerateSchema(GenerateSchemaEventArgs $args)
+    public function postGenerateSchema(GenerateSchemaEventArgs $args): void
     {
         $schema = $args->getSchema();
         $tables = $schema->getTables();
@@ -145,6 +115,28 @@ class DoctrineEventsSubscriber implements EventSubscriber
                 // remove table from schema
                 $schema->dropTable($table->getName());
             }
+            // Check tables for obsolete indexes.
+            // Single column indexes that are the leftmost column of another index are obsolete.
+            // That leftmost column is available to look up rows.
+            // @see https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html
+            $pk              = $table->getPrimaryKey();
+            $pk_first_column = $this->trimQuotes(strtolower($pk->getColumns()[0]));
+
+            foreach ($table->getIndexes() as $id => $index) {
+                $index_first_column = $this->trimQuotes(strtolower($index->getColumns()[0]));
+
+                if (!$index->isPrimary() && 1 == count($index->getColumns()) && $index_first_column === $pk_first_column) {
+                    $table->dropIndex($id);
+                }
+            }
         }
+    }
+
+    /**
+     * Trim quotes from the identifier.
+     */
+    private function trimQuotes(string $identifier): string
+    {
+        return str_replace(['`', '"', '[', ']'], '', $identifier);
     }
 }

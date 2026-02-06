@@ -1,16 +1,8 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Segment\Decorator\Date\Other;
 
+use Doctrine\DBAL\Query\Expression\CompositeExpression;
 use Mautic\LeadBundle\Segment\ContactSegmentFilterCrate;
 use Mautic\LeadBundle\Segment\Decorator\DateDecorator;
 use Mautic\LeadBundle\Segment\Decorator\FilterDecoratorInterface;
@@ -18,48 +10,28 @@ use Mautic\LeadBundle\Segment\Decorator\FilterDecoratorInterface;
 class DateDefault implements FilterDecoratorInterface
 {
     /**
-     * @var DateDecorator
+     * @param string $originalValue
      */
-    private $dateDecorator;
-
-    /**
-     * @var string
-     */
-    private $originalValue;
-
-    /**
-     * @param DateDecorator $dateDecorator
-     * @param string        $originalValue
-     */
-    public function __construct(DateDecorator $dateDecorator, $originalValue)
-    {
-        $this->dateDecorator = $dateDecorator;
-        $this->originalValue = $originalValue;
+    public function __construct(
+        private DateDecorator $dateDecorator,
+        private $originalValue,
+    ) {
     }
 
     /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return null|string
+     * @return string|null
      */
     public function getField(ContactSegmentFilterCrate $contactSegmentFilterCrate)
     {
         return $this->dateDecorator->getField($contactSegmentFilterCrate);
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return string
-     */
-    public function getTable(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getTable(ContactSegmentFilterCrate $contactSegmentFilterCrate): string
     {
         return $this->dateDecorator->getTable($contactSegmentFilterCrate);
     }
 
     /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
      * @return string
      */
     public function getOperator(ContactSegmentFilterCrate $contactSegmentFilterCrate)
@@ -68,8 +40,7 @@ class DateDefault implements FilterDecoratorInterface
     }
 
     /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     * @param array|string              $argument
+     * @param array|string $argument
      *
      * @return array|string
      */
@@ -79,55 +50,32 @@ class DateDefault implements FilterDecoratorInterface
     }
 
     /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return array|bool|float|null|string
+     * @return array|bool|float|string|null
      */
-    public function getParameterValue(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getParameterValue(ContactSegmentFilterCrate $contactSegmentFilterCrate): mixed
     {
         $filter = $this->originalValue;
 
-        switch ($contactSegmentFilterCrate->getOperator()) {
-            case 'like':
-            case '!like':
-                return strpos($filter, '%') === false ? '%'.$filter.'%' : $filter;
-            case 'contains':
-                return '%'.$filter.'%';
-            case 'startsWith':
-                return $filter.'%';
-            case 'endsWith':
-                return '%'.$filter;
-        }
-
-        return $this->originalValue;
+        return match ($contactSegmentFilterCrate->getOperator()) {
+            'like', '!like' => !str_contains($filter, '%') ? '%'.$filter.'%' : $filter,
+            'contains'   => '%'.$filter.'%',
+            'startsWith' => $filter.'%',
+            'endsWith'   => '%'.$filter,
+            default      => $this->originalValue,
+        };
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return string
-     */
-    public function getQueryType(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getQueryType(ContactSegmentFilterCrate $contactSegmentFilterCrate): string
     {
         return $this->dateDecorator->getQueryType($contactSegmentFilterCrate);
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return bool|string
-     */
-    public function getAggregateFunc(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getAggregateFunc(ContactSegmentFilterCrate $contactSegmentFilterCrate): string|bool
     {
         return $this->dateDecorator->getAggregateFunc($contactSegmentFilterCrate);
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return \Mautic\LeadBundle\Segment\Query\Expression\CompositeExpression|null|string
-     */
-    public function getWhere(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getWhere(ContactSegmentFilterCrate $contactSegmentFilterCrate): CompositeExpression|string|null
     {
         return $this->dateDecorator->getWhere($contactSegmentFilterCrate);
     }

@@ -1,44 +1,26 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ChannelBundle\EventListener;
 
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
 use Mautic\LeadBundle\Model\CompanyReportData;
 use Mautic\ReportBundle\Event\ReportBuilderEvent;
 use Mautic\ReportBundle\Event\ReportDataEvent;
 use Mautic\ReportBundle\Event\ReportGeneratorEvent;
 use Mautic\ReportBundle\ReportEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\Routing\RouterInterface;
 
-/**
- * Class ReportSubscriber.
- */
-class ReportSubscriber extends CommonSubscriber
+class ReportSubscriber implements EventSubscriberInterface
 {
-    const CONTEXT_MESSAGE_CHANNEL = 'message.channel';
+    public const CONTEXT_MESSAGE_CHANNEL = 'message.channel';
 
-    /**
-     * @var CompanyReportData
-     */
-    private $companyReportData;
-
-    public function __construct(CompanyReportData $companyReportData)
-    {
-        $this->companyReportData = $companyReportData;
+    public function __construct(
+        private CompanyReportData $companyReportData,
+        private RouterInterface $router,
+    ) {
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             ReportEvents::REPORT_ON_BUILD    => ['onReportBuilder', 0],
@@ -49,10 +31,8 @@ class ReportSubscriber extends CommonSubscriber
 
     /**
      * Add available tables and columns to the report builder lookup.
-     *
-     * @param ReportBuilderEvent $event
      */
-    public function onReportBuilder(ReportBuilderEvent $event)
+    public function onReportBuilder(ReportBuilderEvent $event): void
     {
         if (!$event->checkContext([self::CONTEXT_MESSAGE_CHANNEL])) {
             return;
@@ -126,10 +106,8 @@ class ReportSubscriber extends CommonSubscriber
 
     /**
      * Initialize the QueryBuilder object to generate reports from.
-     *
-     * @param ReportGeneratorEvent $event
      */
-    public function onReportGenerate(ReportGeneratorEvent $event)
+    public function onReportGenerate(ReportGeneratorEvent $event): void
     {
         if (!$event->checkContext([self::CONTEXT_MESSAGE_CHANNEL])) {
             return;
@@ -146,15 +124,12 @@ class ReportSubscriber extends CommonSubscriber
         $event->setQueryBuilder($queryBuilder);
     }
 
-    /**
-     * @param ReportDataEvent $event
-     */
-    public function onReportDisplay(ReportDataEvent $event)
+    public function onReportDisplay(ReportDataEvent $event): void
     {
         $data = $event->getData();
         if ($event->checkContext([self::CONTEXT_MESSAGE_CHANNEL])) {
             if (isset($data[0]['channel']) && isset($data[0]['channel_id'])) {
-                foreach ($data as $key => &$row) {
+                foreach ($data as &$row) {
                     $href = $this->router->generate('mautic_'.$row['channel'].'_action', ['objectAction' => 'view', 'objectId' => $row['channel_id']]);
                     if (isset($row['channel'])) {
                         $row['channel'] = '<a href="'.$href.'">'.$row['channel'].'</a>';

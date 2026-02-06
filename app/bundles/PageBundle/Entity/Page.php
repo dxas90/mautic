@@ -1,163 +1,234 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\PageBundle\Entity;
 
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CategoryBundle\Entity\Category;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
 use Mautic\CoreBundle\Entity\FormEntity;
+use Mautic\CoreBundle\Entity\OptimisticLockInterface;
+use Mautic\CoreBundle\Entity\OptimisticLockTrait;
 use Mautic\CoreBundle\Entity\TranslationEntityInterface;
 use Mautic\CoreBundle\Entity\TranslationEntityTrait;
+use Mautic\CoreBundle\Entity\UuidInterface;
+use Mautic\CoreBundle\Entity\UuidTrait;
 use Mautic\CoreBundle\Entity\VariantEntityInterface;
 use Mautic\CoreBundle\Entity\VariantEntityTrait;
+use Mautic\CoreBundle\Validator\EntityEvent;
+use Mautic\ProjectBundle\Entity\ProjectTrait;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Constraints\Callback;
 use Symfony\Component\Validator\Constraints\NotBlank;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
 use Symfony\Component\Validator\Mapping\ClassMetadata;
 
+#[ApiResource(
+    operations: [
+        new GetCollection(security: "is_granted('page:pages:viewown')"),
+        new Post(security: "is_granted('page:pages:create')"),
+        new Get(security: "is_granted('page:pages:viewown')"),
+        new Put(security: "is_granted('page:pages:editown')"),
+        new Patch(security: "is_granted('page:pages:editother')"),
+        new Delete(security: "is_granted('page:pages:deleteown')"),
+    ],
+    normalizationContext: [
+        'groups'                  => ['page:read'],
+        'swagger_definition_name' => 'Read',
+        'api_included'            => ['category', 'translationChildren'],
+    ],
+    denormalizationContext: [
+        'groups'                  => ['page:write'],
+        'swagger_definition_name' => 'Write',
+    ]
+)]
 /**
- * Class Page.
+ * @use TranslationEntityTrait<Page>
+ * @use VariantEntityTrait<Page>
  */
-class Page extends FormEntity implements TranslationEntityInterface, VariantEntityInterface
+class Page extends FormEntity implements TranslationEntityInterface, VariantEntityInterface, UuidInterface, OptimisticLockInterface
 {
     use TranslationEntityTrait;
     use VariantEntityTrait;
+    use UuidTrait;
+    use ProjectTrait;
+    use OptimisticLockTrait;
+
+    public const ENTITY_NAME = 'page';
+
+    public const TABLE_NAME = 'pages';
 
     /**
      * @var int
      */
+    #[Groups(['page:read', 'download:read', 'email:read'])]
     private $id;
 
     /**
      * @var string
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $title;
 
     /**
      * @var string
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $alias;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $template;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $customHtml;
 
     /**
      * @var array
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $content = [];
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $publishUp;
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $publishDown;
 
     /**
      * @var int
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $hits = 0;
 
     /**
      * @var int
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $uniqueHits = 0;
 
     /**
      * @var int
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $variantHits = 0;
 
     /**
      * @var int
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $revision = 1;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $metaDescription;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
+    private $headScript;
+
+    /**
+     * @var string|null
+     */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
+    private $footerScript;
+
+    /**
+     * @var string|null
+     */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $redirectType;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $redirectUrl;
 
     /**
-     * @var \Mautic\CategoryBundle\Entity\Category
+     * @var Category|null
      **/
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $category;
 
     /**
-     * @var bool
+     * @var bool|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $isPreferenceCenter;
 
     /**
-     * @var bool
+     * @var bool|null
      */
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
     private $noIndex;
 
     /**
      * Used to identify the page for the builder.
-     *
-     * @var
      */
     private $sessionId;
 
+    private ?PageDraft $draft = null;
+
+    private bool $isCloned = false;
+
+    private ?int $cloneObjectId = null;
+
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
+    private ?bool $publicPreview = true;
+
+    #[Groups(['page:read', 'page:write', 'download:read', 'email:read'])]
+    private bool $isDuplicate = false;
+
     public function __clone()
     {
-        $this->id = null;
+        $this->cloneObjectId = (int) $this->id;
+        $this->isCloned      = true;
+        $this->id            = null;
         $this->clearTranslations();
         $this->clearVariants();
+        $this->setDraft(null);
 
         parent::__clone();
     }
 
-    /**
-     * Constructor.
-     */
     public function __construct()
     {
         $this->translationChildren = new \Doctrine\Common\Collections\ArrayCollection();
         $this->variantChildren     = new \Doctrine\Common\Collections\ArrayCollection();
+        $this->initializeProjects();
     }
 
-    /**
-     * @param ORM\ClassMetadata $metadata
-     */
-    public static function loadMetadata(ORM\ClassMetadata $metadata)
+    public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
 
-        $builder->setTable('pages')
-            ->setCustomRepositoryClass('Mautic\PageBundle\Entity\PageRepository')
+        $builder->setTable(self::TABLE_NAME)
+            ->setCustomRepositoryClass(PageRepository::class)
             ->addIndex(['alias'], 'page_alias_search');
 
         $builder->addId();
@@ -196,6 +267,16 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
             ->nullable()
             ->build();
 
+        $builder->createField('headScript', 'text')
+            ->columnName('head_script')
+            ->nullable()
+            ->build();
+
+        $builder->createField('footerScript', 'text')
+            ->columnName('footer_script')
+            ->nullable()
+            ->build();
+
         $builder->createField('redirectType', 'string')
             ->columnName('redirect_type')
             ->nullable()
@@ -220,35 +301,42 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
             ->nullable()
             ->build();
 
+        $builder->createOneToOne('draft', PageDraft::class)
+            ->mappedBy('page')
+            ->fetchExtraLazy()
+            ->cascadeAll()
+            ->build();
+
+        $builder->addNullableField('publicPreview', Types::BOOLEAN, 'public_preview');
+
         self::addTranslationMetadata($builder, self::class);
         self::addVariantMetadata($builder, self::class);
+        static::addUuidField($builder);
+        self::addProjectsField($builder, 'page_projects_xref', 'page_id');
+        self::addVersionField($builder);
     }
 
-    /**
-     * @param ClassMetadata $metadata
-     */
-    public static function loadValidatorMetadata(ClassMetadata $metadata)
+    public static function loadValidatorMetadata(ClassMetadata $metadata): void
     {
         $metadata->addPropertyConstraint('title', new NotBlank([
             'message' => 'mautic.core.title.required',
         ]));
 
-        $metadata->addConstraint(new Callback([
-            'callback' => function (Page $page, ExecutionContextInterface $context) {
+        $metadata->addConstraint(new Callback(
+            function (Page $page, ExecutionContextInterface $context): void {
                 $type = $page->getRedirectType();
                 if (!is_null($type)) {
-                    $validator = $context->getValidator();
-                    $violations = $validator->validate($page->getRedirectUrl(), [
-                        new Assert\Url(
-                            [
-                                'message' => 'mautic.core.value.required',
-                            ]
-                        ),
-                    ]);
+                    $validator  = $context->getValidator();
+                    $violations = $validator->validate(
+                        $page->getRedirectUrl(),
+                        [
+                            new Assert\Url(),
+                            new NotBlank(['message' => 'mautic.core.value.required']),
+                        ],
+                    );
 
-                    if (count($violations) > 0) {
-                        $string = (string) $violations;
-                        $context->buildViolation($string)
+                    foreach ($violations as $violation) {
+                        $context->buildViolation($violation->getMessage())
                             ->atPath('redirectUrl')
                             ->addViolation();
                     }
@@ -256,7 +344,7 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
 
                 if ($page->isVariant()) {
                     // Get a summation of weights
-                    $parent = $page->getVariantParent();
+                    $parent   = $page->getVariantParent();
                     $children = $parent ? $parent->getVariantChildren() : $page->getVariantChildren();
 
                     $total = 0;
@@ -272,15 +360,15 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
                     }
                 }
             },
-        ]));
+        ));
+
+        $metadata->addConstraint(new EntityEvent());
     }
 
     /**
      * Prepares the metadata for API usage.
-     *
-     * @param $metadata
      */
-    public static function loadApiMetadata(ApiMetadataDriver $metadata)
+    public static function loadApiMetadata(ApiMetadataDriver $metadata): void
     {
         $metadata->setGroupPrefix('page')
             ->addListProperties(
@@ -320,6 +408,8 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
             ->setMaxDepth(1, 'translationParent')
             ->setMaxDepth(1, 'translationChildren')
             ->build();
+
+        self::addProjectsInLoadApiMetadata($metadata, 'page');
     }
 
     /**
@@ -385,7 +475,7 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     /**
      * Set content.
      *
-     * @param string $content
+     * @param array<string> $content
      *
      * @return Page
      */
@@ -400,7 +490,7 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     /**
      * Get content.
      *
-     * @return string
+     * @return array<string>
      */
     public function getContent()
     {
@@ -425,7 +515,7 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     /**
      * Get publishUp.
      *
-     * @return \DateTime
+     * @return \DateTimeInterface
      */
     public function getPublishUp()
     {
@@ -450,7 +540,7 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     /**
      * Get publishDown.
      *
-     * @return \DateTime
+     * @return \DateTimeInterface
      */
     public function getPublishDown()
     {
@@ -533,9 +623,55 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     }
 
     /**
-     * Set redirectType.
+     * Set headScript.
      *
-     * @param string $redirectType
+     * @param string $headScript
+     *
+     * @return Page
+     */
+    public function setHeadScript($headScript)
+    {
+        $this->headScript = $headScript;
+
+        return $this;
+    }
+
+    /**
+     * Get headScript.
+     *
+     * @return string
+     */
+    public function getHeadScript()
+    {
+        return $this->headScript;
+    }
+
+    /**
+     * Set footerScript.
+     *
+     * @param string $footerScript
+     *
+     * @return Page
+     */
+    public function setFooterScript($footerScript)
+    {
+        $this->footerScript = $footerScript;
+
+        return $this;
+    }
+
+    /**
+     * Get footerScript.
+     *
+     * @return string
+     */
+    public function getFooterScript()
+    {
+        return $this->footerScript;
+    }
+
+    /**
+     * @param ?string $redirectType
      *
      * @return Page
      */
@@ -548,9 +684,7 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     }
 
     /**
-     * Get redirectType.
-     *
-     * @return string
+     * @return ?string
      */
     public function getRedirectType()
     {
@@ -585,11 +719,9 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     /**
      * Set category.
      *
-     * @param \Mautic\CategoryBundle\Entity\Category $category
-     *
      * @return Page
      */
-    public function setCategory(Category $category = null)
+    public function setCategory(?Category $category = null)
     {
         $this->isChanged('category', $category);
         $this->category = $category;
@@ -600,7 +732,7 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     /**
      * Get category.
      *
-     * @return \Mautic\CategoryBundle\Entity\Category
+     * @return Category
      */
     public function getCategory()
     {
@@ -608,24 +740,21 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     }
 
     /**
-     * Set isPreferenceCenter.
-     *
-     * @param bool $isPreferenceCenter
+     * @param bool|null $isPreferenceCenter
      *
      * @return Page
      */
     public function setIsPreferenceCenter($isPreferenceCenter)
     {
-        $this->isChanged('isPreferenceCenter', $isPreferenceCenter);
-        $this->isPreferenceCenter = $isPreferenceCenter;
+        $sanitizedValue = null === $isPreferenceCenter ? null : (bool) $isPreferenceCenter;
+        $this->isChanged('isPreferenceCenter', $sanitizedValue);
+        $this->isPreferenceCenter = $sanitizedValue;
 
         return $this;
     }
 
     /**
-     * Get isPreferenceCenter.
-     *
-     * @return bool
+     * @return bool|null
      */
     public function getIsPreferenceCenter()
     {
@@ -633,20 +762,17 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     }
 
     /**
-     * Set noIndex.
-     *
-     * @param bool $noIndex
+     * @param bool|null $noIndex
      */
-    public function setNoIndex($noIndex)
+    public function setNoIndex($noIndex): void
     {
-        $this->isChanged('noIndex', $noIndex);
-        $this->noIndex = $noIndex;
+        $sanitizedValue = null === $noIndex ? null : (bool) $noIndex;
+        $this->isChanged('noIndex', $sanitizedValue);
+        $this->noIndex = $sanitizedValue;
     }
 
     /**
-     * Get noIndex.
-     *
-     * @return bool
+     * @return bool|null
      */
     public function getNoIndex()
     {
@@ -702,16 +828,12 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
         return $this->template;
     }
 
-    /**
-     * @param $prop
-     * @param $val
-     */
     protected function isChanged($prop, $val)
     {
         $getter  = 'get'.ucfirst($prop);
         $current = $this->$getter();
 
-        if ($prop == 'translationParent' || $prop == 'variantParent' || $prop == 'category') {
+        if ('translationParent' == $prop || 'variantParent' == $prop || 'category' == $prop) {
             $currentId = ($current) ? $current->getId() : '';
             $newId     = ($val) ? $val->getId() : null;
             if ($currentId != $newId) {
@@ -759,7 +881,7 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     /**
      * @param mixed $variantHits
      */
-    public function setVariantHits($variantHits)
+    public function setVariantHits($variantHits): void
     {
         $this->variantHits = $variantHits;
     }
@@ -775,8 +897,66 @@ class Page extends FormEntity implements TranslationEntityInterface, VariantEnti
     /**
      * @param mixed $customHtml
      */
-    public function setCustomHtml($customHtml)
+    public function setCustomHtml($customHtml): void
     {
         $this->customHtml = $customHtml;
+    }
+
+    public function hasDraft(): bool
+    {
+        return !is_null($this->getDraft());
+    }
+
+    public function getDraftContent(): ?string
+    {
+        return $this->hasDraft() ? $this->getDraft()->getHtml() : null;
+    }
+
+    public function getDraft(): ?PageDraft
+    {
+        return $this->draft;
+    }
+
+    public function setDraft(?PageDraft $draft): void
+    {
+        $this->draft = $draft;
+    }
+
+    public function getIsClone(): bool
+    {
+        return $this->isCloned;
+    }
+
+    public function getCloneObjectId(): int
+    {
+        return $this->cloneObjectId;
+    }
+
+    public function getPublicPreview(): bool
+    {
+        return $this->publicPreview;
+    }
+
+    public function isPublicPreview(): bool
+    {
+        return $this->publicPreview;
+    }
+
+    public function setPublicPreview(bool $publicPreview): self
+    {
+        $this->isChanged('publicPreview', $publicPreview);
+        $this->publicPreview = $publicPreview;
+
+        return $this;
+    }
+
+    public function isDuplicate(): bool
+    {
+        return $this->isDuplicate;
+    }
+
+    public function setIsDuplicate(bool $isDuplicate): void
+    {
+        $this->isDuplicate = $isDuplicate;
     }
 }

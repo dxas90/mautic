@@ -1,22 +1,13 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Tests\Event;
 
 use Mautic\LeadBundle\Entity\Company;
 use Mautic\LeadBundle\Event\CompanyEvent;
 
-class CompanyEventTest extends \PHPUnit_Framework_TestCase
+class CompanyEventTest extends \PHPUnit\Framework\TestCase
 {
-    public function testConstructGettersSetters()
+    public function testConstructGettersSetters(): void
     {
         $company = new Company();
         $isNew   = false;

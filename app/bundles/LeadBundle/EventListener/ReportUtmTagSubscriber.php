@@ -1,53 +1,25 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\EventListener;
 
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
 use Mautic\LeadBundle\Model\CompanyReportData;
 use Mautic\LeadBundle\Report\FieldsBuilder;
 use Mautic\ReportBundle\Event\ReportBuilderEvent;
 use Mautic\ReportBundle\Event\ReportGeneratorEvent;
 use Mautic\ReportBundle\ReportEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
-class ReportUtmTagSubscriber extends CommonSubscriber
+class ReportUtmTagSubscriber implements EventSubscriberInterface
 {
-    const UTM_TAG = 'lead.utmTag';
+    public const UTM_TAG = 'lead.utmTag';
 
-    /**
-     * @var FieldsBuilder
-     */
-    private $fieldsBuilder;
-
-    /**
-     * @var CompanyReportData
-     */
-    private $companyReportData;
-
-    /**
-     * @param FieldsBuilder     $fieldsBuilder
-     * @param CompanyReportData $companyReportData
-     */
     public function __construct(
-        FieldsBuilder $fieldsBuilder,
-        CompanyReportData $companyReportData
+        private FieldsBuilder $fieldsBuilder,
+        private CompanyReportData $companyReportData,
     ) {
-        $this->fieldsBuilder     = $fieldsBuilder;
-        $this->companyReportData = $companyReportData;
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             ReportEvents::REPORT_ON_BUILD    => ['onReportBuilder', 0],
@@ -57,17 +29,16 @@ class ReportUtmTagSubscriber extends CommonSubscriber
 
     /**
      * Add available tables and columns to the report builder lookup.
-     *
-     * @param ReportBuilderEvent $event
      */
-    public function onReportBuilder(ReportBuilderEvent $event)
+    public function onReportBuilder(ReportBuilderEvent $event): void
     {
         if (!$event->checkContext([self::UTM_TAG])) {
             return;
         }
 
-        $columns        = $this->fieldsBuilder->getLeadFieldsColumns('l.');
-        $companyColumns = $this->companyReportData->getCompanyData();
+        $columns           = $this->fieldsBuilder->getLeadFieldsColumns('l.');
+        $companyColumns    = $this->companyReportData->getCompanyData();
+        $leadFilter        = $this->fieldsBuilder->getLeadFilter('l.', 's.');
 
         $utmTagColumns = [
             'utm.utm_campaign' => [
@@ -95,16 +66,15 @@ class ReportUtmTagSubscriber extends CommonSubscriber
         $data = [
             'display_name' => 'mautic.lead.report.utm.utm_tag',
             'columns'      => array_merge($columns, $companyColumns, $utmTagColumns),
+            'filters'      => array_merge($columns, $companyColumns, $utmTagColumns, $leadFilter),
         ];
         $event->addTable(self::UTM_TAG, $data, ReportSubscriber::GROUP_CONTACTS);
     }
 
     /**
      * Initialize the QueryBuilder object to generate reports from.
-     *
-     * @param ReportGeneratorEvent $event
      */
-    public function onReportGenerate(ReportGeneratorEvent $event)
+    public function onReportGenerate(ReportGeneratorEvent $event): void
     {
         if (!$event->checkContext([self::UTM_TAG])) {
             return;
@@ -114,17 +84,21 @@ class ReportUtmTagSubscriber extends CommonSubscriber
         $qb->from(MAUTIC_TABLE_PREFIX.'lead_utmtags', 'utm')
             ->leftJoin('utm', MAUTIC_TABLE_PREFIX.'leads', 'l', 'l.id = utm.lead_id');
 
-        if ($event->hasColumn(['u.first_name', 'u.last_name']) || $event->hasFilter(['u.first_name', 'u.last_name'])) {
+        if ($event->usesColumn(['u.first_name', 'u.last_name'])) {
             $qb->leftJoin('l', MAUTIC_TABLE_PREFIX.'users', 'u', 'u.id = l.owner_id');
         }
 
-        if ($event->hasColumn('i.ip_address') || $event->hasFilter('i.ip_address')) {
+        if ($event->usesColumn('i.ip_address')) {
             $event->addLeadIpAddressLeftJoin($qb);
         }
 
         if ($this->companyReportData->eventHasCompanyColumns($event)) {
             $qb->leftJoin('l', MAUTIC_TABLE_PREFIX.'companies_leads', 'companies_lead', 'l.id = companies_lead.lead_id');
             $qb->leftJoin('companies_lead', MAUTIC_TABLE_PREFIX.'companies', 'comp', 'companies_lead.company_id = comp.id');
+        }
+
+        if ($event->hasFilter('s.leadlist_id')) {
+            $qb->join('l', MAUTIC_TABLE_PREFIX.'lead_lists_leads', 's', 's.lead_id = l.id AND s.manually_removed = 0');
         }
 
         $event->setQueryBuilder($qb);

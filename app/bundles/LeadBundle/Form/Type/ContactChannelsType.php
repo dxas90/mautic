@@ -2,44 +2,38 @@
 
 namespace Mautic\LeadBundle\Form\Type;
 
+use Mautic\CoreBundle\Form\Type\FormButtonsType;
 use Mautic\CoreBundle\Helper\CoreParametersHelper;
 use Mautic\LeadBundle\Entity\FrequencyRule;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\DateType;
+use Symfony\Component\Form\Extension\Core\Type\HiddenType;
+use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
+/**
+ * @extends AbstractType<mixed>
+ */
 class ContactChannelsType extends AbstractType
 {
-    /**
-     * @var CoreParametersHelper
-     */
-    private $coreParametersHelper;
-
-    /**
-     * @param CoreParametersHelper $coreParametersHelper
-     */
-    public function __construct(CoreParametersHelper $coreParametersHelper)
-    {
-        $this->coreParametersHelper = $coreParametersHelper;
+    public function __construct(
+        private CoreParametersHelper $coreParametersHelper,
+    ) {
     }
 
-    /**
-     * @see AbstractType::buildForm()
-     * {@inheritdoc}
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $showContactFrequency         = $this->coreParametersHelper->getParameter('show_contact_frequency');
-        $showContactPauseDates        = $this->coreParametersHelper->getParameter('show_contact_pause_dates');
-        $showContactPreferredChannels = $this->coreParametersHelper->getParameter('show_contact_preferred_channels');
+        $showContactFrequency         = $this->coreParametersHelper->get('show_contact_frequency');
+        $showContactPauseDates        = $this->coreParametersHelper->get('show_contact_pause_dates');
+        $showContactPreferredChannels = $this->coreParametersHelper->get('show_contact_preferred_channels');
 
         $builder->add(
             'subscribed_channels',
-            'choice',
+            ChoiceType::class,
             [
                 'choices'           => $options['channels'],
-                'choices_as_values' => true,
                 'expanded'          => true,
                 'label_attr'        => ['class' => 'control-label'],
                 'attr'              => ['onClick' => 'Mautic.togglePreferredChannel(this.value);'],
@@ -52,15 +46,14 @@ class ContactChannelsType extends AbstractType
         if (!$options['public_view'] || $showContactPreferredChannels) {
             $builder->add(
                 'preferred_channel',
-                'choice',
+                ChoiceType::class,
                 [
                     'choices'           => $options['channels'],
-                    'choices_as_values' => true,
                     'expanded'          => false,
                     'multiple'          => false,
                     'label'             => 'mautic.lead.list.frequency.preferred.channel',
                     'label_attr'        => ['class' => 'control-label'],
-                    'empty_value'       => false,
+                    'placeholder'       => false,
                     'required'          => false,
                     'attr'              => [
                         'class'   => 'form-control',
@@ -77,11 +70,10 @@ class ContactChannelsType extends AbstractType
 
                 $builder->add(
                     'frequency_number_'.$channel,
-                    'integer',
+                    IntegerType::class,
                     [
-                        'precision'  => 0,
                         'label'      => 'mautic.lead.list.frequency.number',
-                        'label_attr' => ['class' => 'text-muted fw-n label1'],
+                        'label_attr' => ['class' => 'text-secondary fw-n label1'],
                         'attr'       => array_merge(
                             $attr,
                             [
@@ -94,15 +86,15 @@ class ContactChannelsType extends AbstractType
 
                 $builder->add(
                     'frequency_time_'.$channel,
-                    'choice',
+                    ChoiceType::class,
                     [
-                        'choices' => [
-                            FrequencyRule::TIME_DAY   => 'mautic.core.time.days',
-                            FrequencyRule::TIME_WEEK  => 'mautic.core.time.weeks',
-                            FrequencyRule::TIME_MONTH => 'mautic.core.time.months',
+                        'choices'           => [
+                            'mautic.core.time.days'   => FrequencyRule::TIME_DAY,
+                            'mautic.core.time.weeks'  => FrequencyRule::TIME_WEEK,
+                            'mautic.core.time.months' => FrequencyRule::TIME_MONTH,
                         ],
                         'label'      => 'mautic.lead.list.frequency.times',
-                        'label_attr' => ['class' => 'text-muted fw-n frequency-label label2'],
+                        'label_attr' => ['class' => 'text-secondary fw-n frequency-label label2'],
                         'multiple'   => false,
                         'required'   => false,
                         'attr'       => array_merge(
@@ -114,7 +106,7 @@ class ContactChannelsType extends AbstractType
                     ]
                 );
 
-                if ($options['public_view'] == false) {
+                if (false == $options['public_view']) {
                     $attributes = array_merge(
                         $attr,
                         [
@@ -135,42 +127,38 @@ class ContactChannelsType extends AbstractType
                     $builder->add(
                         'contact_pause_start_date_'.$channel,
                         DateType::class,
-                        [
+                        $this->configureDateTypeOptions([
                             'widget'     => 'single_text',
                             'label'      => false,
-                            'label_attr' => ['class' => 'text-muted fw-n label3'],
+                            'label_attr' => ['class' => 'text-secondary fw-n label3'],
                             'attr'       => $attributes,
-                            'format'     => $options['public_view'] ? DateType::HTML5_FORMAT : 'yyyy-MM-dd',
-                            'html5'      => $options['public_view'],
                             'required'   => false,
-                        ]
+                        ], $options['public_view'])
                     );
                     $builder->add(
                         'contact_pause_end_date_'.$channel,
                         DateType::class,
-                        [
+                        $this->configureDateTypeOptions([
                             'widget'     => 'single_text',
                             'label'      => 'mautic.lead.frequency.contact.end.date',
-                            'label_attr' => ['class' => 'frequency-label text-muted fw-n label4'],
+                            'label_attr' => ['class' => 'frequency-label text-secondary fw-n label4'],
                             'attr'       => $attributes,
-                            'format'     => $options['public_view'] ? DateType::HTML5_FORMAT : 'yyyy-MM-dd',
-                            'html5'      => $options['public_view'],
                             'required'   => false,
-                        ]
+                        ], $options['public_view'])
                     );
                 }
             }
         }
 
-        if (isset($options['save_button']) && $options['save_button'] === true) {
+        if (isset($options['save_button']) && true === $options['save_button']) {
             $builder->add(
                 'ids',
-                'hidden'
+                HiddenType::class
             );
 
             $builder->add(
                 'buttons',
-                'form_buttons',
+                FormButtonsType::class,
                 [
                     'apply_text'     => false,
                     'save_text'      => 'mautic.core.form.save',
@@ -187,11 +175,7 @@ class ContactChannelsType extends AbstractType
         }
     }
 
-    /**
-     * @see AbstractType::configureOptions()
-     * {@inheritdoc}
-     */
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setRequired(['channels']);
         $resolver->setDefaults(
@@ -200,5 +184,21 @@ class ContactChannelsType extends AbstractType
                 'save_button'               => false,
             ]
         );
+    }
+
+    /**
+     * @param array<string,string|bool|mixed[]> $options
+     *
+     * @return array<string,string|bool|mixed[]>
+     */
+    private function configureDateTypeOptions(array $options, bool $useHtml5): array
+    {
+        $options['html5'] = $useHtml5;
+
+        if (!$useHtml5) {
+            $options['format'] = 'yyyy-MM-dd';
+        }
+
+        return $options;
     }
 }

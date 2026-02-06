@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\PageBundle\Entity;
 
 use Doctrine\Common\Collections\ArrayCollection;
@@ -17,13 +8,10 @@ use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
 use Mautic\CoreBundle\Entity\FormEntity;
 
-/**
- * Class Redirect.
- */
 class Redirect extends FormEntity
 {
     /**
-     * @var int
+     * @var string
      */
     private $id;
 
@@ -32,9 +20,6 @@ class Redirect extends FormEntity
      */
     private $redirectId;
 
-    /**
-     * @var
-     */
     private $url;
 
     /**
@@ -48,29 +33,23 @@ class Redirect extends FormEntity
     private $uniqueHits = 0;
 
     /**
-     * @var ArrayCollection
+     * @var ArrayCollection<int, Trackable>
      */
     private $trackables;
 
-    /**
-     * Redirect constructor.
-     */
     public function __construct()
     {
         $this->trackables = new ArrayCollection();
     }
 
-    /**
-     * @param ORM\ClassMetadata $metadata
-     */
-    public static function loadMetadata(ORM\ClassMetadata $metadata)
+    public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
 
         $builder->setTable('page_redirects')
-            ->setCustomRepositoryClass('Mautic\PageBundle\Entity\RedirectRepository');
+            ->setCustomRepositoryClass(RedirectRepository::class);
 
-        $builder->addId();
+        $builder->addBigIntIdField();
 
         $builder->createField('redirectId', 'string')
             ->columnName('redirect_id')
@@ -93,10 +72,8 @@ class Redirect extends FormEntity
 
     /**
      * Prepares the metadata for API usage.
-     *
-     * @param $metadata
      */
-    public static function loadApiMetadata(ApiMetadataDriver $metadata)
+    public static function loadApiMetadata(ApiMetadataDriver $metadata): void
     {
         $metadata->setGroupPrefix('redirect')
             ->addListProperties(
@@ -115,12 +92,9 @@ class Redirect extends FormEntity
             ->build();
     }
 
-    /**
-     * @return int
-     */
-    public function getId()
+    public function getId(): int
     {
-        return $this->id;
+        return (int) $this->id;
     }
 
     /**
@@ -134,38 +108,33 @@ class Redirect extends FormEntity
     /**
      * @param string $redirectId
      */
-    public function setRedirectId($redirectId = null)
+    public function setRedirectId($redirectId = null): void
     {
-        if ($redirectId === null) {
+        if (null === $redirectId) {
             $redirectId = substr(hash('sha1', uniqid(mt_rand())), 0, 25);
         }
         $this->redirectId = $redirectId;
     }
 
-    /**
-     * @return string
-     */
-    public function getUrl()
+    public function getUrl(): string
     {
-        return $this->url;
+        return trim($this->url);
     }
 
     /**
      * @param string $url
      */
-    public function setUrl($url)
+    public function setUrl($url): void
     {
-        $this->url = $url;
+        $this->url = trim($url);
     }
 
     /**
      * Set hits.
      *
      * @param int $hits
-     *
-     * @return Page
      */
-    public function setHits($hits)
+    public function setHits($hits): Redirect
     {
         $this->hits = $hits;
 
@@ -186,10 +155,8 @@ class Redirect extends FormEntity
      * Set uniqueHits.
      *
      * @param int $uniqueHits
-     *
-     * @return Page
      */
-    public function setUniqueHits($uniqueHits)
+    public function setUniqueHits($uniqueHits): Redirect
     {
         $this->uniqueHits = $uniqueHits;
 

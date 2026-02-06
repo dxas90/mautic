@@ -1,15 +1,6 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
-namespace Mautic\EmailBundle\Tests;
+namespace Mautic\EmailBundle\Tests\MonitoredEmail;
 
 use Mautic\CoreBundle\Translation\Translator;
 use Mautic\EmailBundle\Event\ParseEmailEvent;
@@ -18,7 +9,8 @@ use Mautic\EmailBundle\MonitoredEmail\Mailbox;
 use Mautic\EmailBundle\MonitoredEmail\Message;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 
-class FetcherTest extends \PHPUnit_Framework_TestCase
+#[\PHPUnit\Framework\Attributes\CoversClass(Fetcher::class)]
+class FetcherTest extends \PHPUnit\Framework\TestCase
 {
     protected $mailboxes = [
         'EmailBundle_bounces' => [
@@ -56,23 +48,13 @@ class FetcherTest extends \PHPUnit_Framework_TestCase
         ],
     ];
 
-    /**
-     * @testdox Test that the EmailEvents::EMAIL_PARSE event is dispatched from found messages
-     *
-     * @covers  \Mautic\EmailBundle\MonitoredEmail\Fetcher::fetch()
-     * @covers  \Mautic\EmailBundle\MonitoredEmail\Fetcher::getMessages()
-     * @covers  \Mautic\EmailBundle\MonitoredEmail\Fetcher::getConfigs()
-     */
-    public function testMessagesAreFetchedAndEventDispatched()
+    #[\PHPUnit\Framework\Attributes\TestDox('Test that the EmailEvents::EMAIL_PARSE event is dispatched from found messages')]
+    public function testMessagesAreFetchedAndEventDispatched(): void
     {
-        $mailbox = $this->getMockBuilder(Mailbox::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $mailbox = $this->createMock(Mailbox::class);
         $mailbox->method('getMailboxSettings')
             ->willReturnCallback(
-                function ($mailbox) {
-                    return $this->mailboxes[$mailbox];
-                }
+                fn ($mailbox) => $this->mailboxes[$mailbox]
             );
         $mailbox->method('searchMailBox')
             ->willReturn([1]);
@@ -80,16 +62,12 @@ class FetcherTest extends \PHPUnit_Framework_TestCase
             ->willReturn(new Message());
 
         $event      = new ParseEmailEvent();
-        $dispatcher = $this->getMockBuilder(EventDispatcher::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $dispatcher = $this->createMock(EventDispatcher::class);
         $dispatcher->expects($this->exactly(2))
             ->method('dispatch')
             ->willReturn($event);
 
-        $translator = $this->getMockBuilder(Translator::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $translator = $this->createMock(Translator::class);
 
         $fetcher = new Fetcher($mailbox, $dispatcher, $translator);
         $fetcher->setMailboxes(array_keys($this->mailboxes))

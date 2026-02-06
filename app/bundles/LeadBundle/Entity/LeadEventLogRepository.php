@@ -1,22 +1,13 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Entity;
 
-use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\Tools\Pagination\Paginator;
 use Mautic\CoreBundle\Entity\CommonRepository;
 
 /**
- * Class LeadEventLogRepository.
+ * @extends CommonRepository<LeadEventLog>
  */
 class LeadEventLogRepository extends CommonRepository
 {
@@ -25,8 +16,6 @@ class LeadEventLogRepository extends CommonRepository
     /**
      * Returns paginator with failed rows.
      *
-     * @param        $importId
-     * @param array  $args
      * @param string $bundle
      * @param string $object
      *
@@ -37,12 +26,26 @@ class LeadEventLogRepository extends CommonRepository
         return $this->getSpecificRows($importId, 'failed', $args, $bundle, $object);
     }
 
+    public function getEntities(array $args = [])
+    {
+        $entities = parent::getEntities($args);
+        $entities = iterator_to_array($entities);
+
+        foreach ($entities as $key => $row) {
+            if (
+                isset($row['properties']['error'])
+                && preg_match('/SQLSTATE\[\w+\]: (.*)/', $row['properties']['error'], $matches)
+            ) {
+                $entities[$key]['properties']['error'] = $matches[1];
+            }
+        }
+
+        return $entities;
+    }
+
     /**
      * Returns paginator with specific type of rows.
      *
-     * @param        $objectId
-     * @param        $action
-     * @param array  $args
      * @param string $bundle
      * @param string $object
      *
@@ -89,15 +92,13 @@ class LeadEventLogRepository extends CommonRepository
     }
 
     /**
-     * @param Lead|null         $contact
-     * @param null              $bundle
-     * @param null              $object
+     * @param ?string           $bundle
+     * @param ?string           $object
      * @param array|string|null $actions
-     * @param array             $options
      *
      * @return array
      */
-    public function getEvents(Lead $contact = null, $bundle = null, $object = null, $actions = null, array $options = [])
+    public function getEvents(?Lead $contact = null, $bundle = null, $object = null, $actions = null, array $options = [])
     {
         $alias = $this->getTableAlias();
         $qb    = $this->getEntityManager()->getConnection()->createQueryBuilder()
@@ -124,7 +125,7 @@ class LeadEventLogRepository extends CommonRepository
                 $qb->andWhere(
                     $qb->expr()->in($alias.'.action', ':actions')
                 )
-                    ->setParameter('actions', $actions, Connection::PARAM_STR_ARRAY);
+                    ->setParameter('actions', $actions, ArrayParameterType::STRING);
             } else {
                 $qb->andWhere($alias.'.action = :action')
                     ->setParameter('action', $actions);
@@ -132,10 +133,10 @@ class LeadEventLogRepository extends CommonRepository
         }
 
         if (!empty($options['search'])) {
-            $qb->andWhere($qb->expr()->like($alias.'.properties', $qb->expr()->literal('%'.$options['search'].'%')));
+            $qb->andWhere($qb->expr()->like('LOWER('.$alias.'.properties)', $qb->expr()->literal('%'.strtolower($options['search']).'%')));
         }
 
-        return $this->getTimelineResults($qb, $options, $alias.'.action', $alias.'.date_added', [], ['date_added']);
+        return $this->getTimelineResults($qb, $options, $alias.'.action', $alias.'.date_added', [], ['date_added'], null, $alias.'.id');
     }
 
     /**
@@ -144,59 +145,20 @@ class LeadEventLogRepository extends CommonRepository
      * @param int $fromLeadId
      * @param int $toLeadId
      */
-    public function updateLead($fromLeadId, $toLeadId)
+    public function updateLead($fromLeadId, $toLeadId): void
     {
         $q = $this->_em->getConnection()->createQueryBuilder();
         $q->update(MAUTIC_TABLE_PREFIX.'lead_event_log')
             ->set('lead_id', (int) $toLeadId)
             ->where('lead_id = '.(int) $fromLeadId)
-            ->execute();
+            ->executeStatement();
     }
 
     /**
      * Defines default table alias for lead_event_log table.
-     *
-     * @return string
      */
-    public function getTableAlias()
+    public function getTableAlias(): string
     {
         return 'lel';
-    }
-
-    /**
-     * Loads data for specified lead events.
-     *
-     * @deprecated 2.14.1 to be removed in 3.0; use getEvents() instead
-     *
-     * @param string    $bundle
-     * @param string    $object
-     * @param Lead|null $lead
-     * @param array     $options
-     *
-     * @return array
-     */
-    public function getEventsByLead($bundle, $object, Lead $lead = null, array $options = [])
-    {
-        trigger_error('LeadEventLogRepository::getEventsByLead is deprecated. Use LeadEventLogRepository::getEvents instead', E_USER_DEPRECATED);
-
-        return $this->getEvents($lead, $bundle, $object, null, $options);
-    }
-
-    /**
-     * Loads data for specified lead events by action.
-     *
-     * @deprecated 2.14.1 to be removed in 3.0; use getEvents() instead
-     *
-     * @param           $action
-     * @param Lead|null $lead
-     * @param array     $options
-     *
-     * @return array
-     */
-    public function getEventsByAction($action, Lead $lead = null, array $options = [])
-    {
-        trigger_error('LeadEventLogRepository::getEventsByAction is deprecated. Use LeadEventLogRepository::getEvents instead', E_USER_DEPRECATED);
-
-        return $this->getEvents($lead, null, null, $action, $options);
     }
 }

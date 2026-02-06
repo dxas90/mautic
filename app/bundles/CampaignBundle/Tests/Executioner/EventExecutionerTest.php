@@ -1,13 +1,6 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
+declare(strict_types=1);
 
 namespace Mautic\CampaignBundle\Tests\Executioner;
 
@@ -33,67 +26,69 @@ use Mautic\CampaignBundle\Form\Type\CampaignEventJumpToEventType;
 use Mautic\CampaignBundle\Helper\RemovedContactTracker;
 use Mautic\CoreBundle\Translation\Translator;
 use Mautic\EmailBundle\EmailEvents;
+use Mautic\EmailBundle\Form\Type\EmailSendType;
 use Mautic\LeadBundle\Entity\Lead;
+use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\LoggerInterface;
 
-class EventExecutionerTest extends \PHPUnit_Framework_TestCase
+class EventExecutionerTest extends \PHPUnit\Framework\TestCase
 {
     /**
-     * @var EventCollector|\PHPUnit_Framework_MockObject_MockObject
+     * @var EventCollector&MockObject
      */
-    private $eventCollector;
+    private MockObject $eventCollector;
 
     /**
-     * @var EventLogger|\PHPUnit_Framework_MockObject_MockObject
+     * @var EventLogger&MockObject
      */
-    private $eventLogger;
+    private MockObject $eventLogger;
 
     /**
-     * @var ActionExecutioner|\PHPUnit_Framework_MockObject_MockObject
+     * @var ActionExecutioner&MockObject
      */
-    private $actionExecutioner;
+    private MockObject $actionExecutioner;
 
     /**
-     * @var ConditionExecutioner|\PHPUnit_Framework_MockObject_MockObject
+     * @var ConditionExecutioner&MockObject
      */
-    private $conditionExecutioner;
+    private MockObject $conditionExecutioner;
 
     /**
-     * @var DecisionExecutioner|\PHPUnit_Framework_MockObject_MockObject
+     * @var DecisionExecutioner&MockObject
      */
-    private $decisionExecutioner;
+    private MockObject $decisionExecutioner;
 
     /**
-     * @var LoggerInterface|\PHPUnit_Framework_MockObject_MockObject
+     * @var LoggerInterface&MockObject
      */
-    private $logger;
+    private MockObject $logger;
 
     /**
-     * @var EventScheduler|\PHPUnit_Framework_MockObject_MockObject
+     * @var EventScheduler&MockObject
      */
-    private $eventScheduler;
+    private MockObject $eventScheduler;
 
     /**
-     * @var RemovedContactTracker|\PHPUnit_Framework_MockObject_MockObject
+     * @var RemovedContactTracker&MockObject
      */
-    private $removedContactTracker;
+    private MockObject $removedContactTracker;
 
     /**
-     * @var LeadRepository|\PHPUnit_Framework_MockObject_MockObject
+     * @var LeadRepository&MockObject
      */
-    private $leadRepository;
+    private MockObject $leadRepository;
 
     /**
-     * @var EventRepository|\PHPUnit_Framework_MockObject_MockBuilder
+     * @var EventRepository&MockObject
      */
-    private $eventRepository;
+    private MockObject $eventRepository;
 
     /**
-     * @var Translator|\PHPUnit_Framework_MockObject_MockBuilder
+     * @var Translator&MockObject
      */
-    private $translator;
+    private MockObject $translator;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->eventCollector        = $this->createMock(EventCollector::class);
         $this->eventLogger           = $this->createMock(EventLogger::class);
@@ -106,16 +101,11 @@ class EventExecutionerTest extends \PHPUnit_Framework_TestCase
         $this->eventScheduler        = $this->createMock(EventScheduler::class);
         $this->removedContactTracker = $this->createMock(RemovedContactTracker::class);
         $this->leadRepository        = $this->createMock(LeadRepository::class);
-        $this->eventRepository       = $this->getMockBuilder(EventRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $this->translator = $this->getMockBuilder(Translator::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->eventRepository       = $this->createMock(EventRepository::class);
+        $this->translator            = $this->createMock(Translator::class);
     }
 
-    public function testJumpToEventsAreProcessedAfterOtherEvents()
+    public function testJumpToEventsAreProcessedAfterOtherEvents(): void
     {
         $campaign = new Campaign();
 
@@ -124,11 +114,11 @@ class EventExecutionerTest extends \PHPUnit_Framework_TestCase
             ->setType('email.send')
             ->setCampaign($campaign);
         $otherConfig = new ActionAccessor(
-           [
+            [
                 'label'                => 'mautic.email.campaign.event.send',
                 'description'          => 'mautic.email.campaign.event.send_descr',
                 'batchEventName'       => EmailEvents::ON_CAMPAIGN_BATCH_ACTION,
-                'formType'             => 'emailsend_list',
+                'formType'             => EmailSendType::class,
                 'formTypeOptions'      => ['update_select' => 'campaignevent_properties_email', 'with_email_types' => true],
                 'formTheme'            => 'MauticEmailBundle:FormTheme\EmailSendList',
                 'channel'              => 'email',
@@ -145,7 +135,7 @@ class EventExecutionerTest extends \PHPUnit_Framework_TestCase
                 'label'                  => 'mautic.campaign.event.jump_to_event',
                 'description'            => 'mautic.campaign.event.jump_to_event_descr',
                 'formType'               => CampaignEventJumpToEventType::class,
-                'template'               => 'MauticCampaignBundle:Event:jump.html.php',
+                'template'               => '@MauticCampaign/Event/jump.html.twig',
                 'batchEventName'         => CampaignEvents::ON_EVENT_JUMP_TO_EVENT,
                 'connectionRestrictions' => [
                     'target' => [
@@ -191,31 +181,29 @@ class EventExecutionerTest extends \PHPUnit_Framework_TestCase
                     return $logs;
                 }
             );
+        $matcher = $this->exactly(2);
 
-        $this->actionExecutioner->expects($this->exactly(2))
-            ->method('execute')
-            ->withConsecutive(
-                [
-                    $otherConfig,
-                    $this->isInstanceOf(ArrayCollection::class),
-                ],
-                [
-                    $jumpConfig,
-                    $this->isInstanceOf(ArrayCollection::class),
-                ]
-            )
-            ->willReturn(new EvaluatedContacts());
+        $this->actionExecutioner->expects($matcher)
+            ->method('execute')->willReturnCallback(function (...$parameters) use ($matcher, $otherConfig, $jumpConfig) {
+                $this->assertInstanceOf(ArrayCollection::class, $parameters[1]);
+                if (1 === $matcher->numberOfInvocations()) {
+                    $this->assertEquals($otherConfig, $parameters[0]);
+                }
+                if (2 === $matcher->numberOfInvocations()) {
+                    $this->assertEquals($jumpConfig, $parameters[0]);
+                }
 
-        $this->leadRepository->expects($this->once())
+                return new EvaluatedContacts();
+            });
+
+        // This should not be called because the rotation is already incremented in the subscriber
+        $this->leadRepository->expects($this->never())
             ->method('incrementCampaignRotationForContacts');
 
         $this->getEventExecutioner()->executeEventsForContacts($events, $contacts);
     }
 
-    /**
-     * @return EventExecutioner
-     */
-    private function getEventExecutioner()
+    private function getEventExecutioner(): EventExecutioner
     {
         return new EventExecutioner(
             $this->eventCollector,
@@ -226,11 +214,10 @@ class EventExecutionerTest extends \PHPUnit_Framework_TestCase
             $this->logger,
             $this->eventScheduler,
             $this->removedContactTracker,
-            $this->leadRepository
         );
     }
 
-    public function testJumpToEventsExecutedWithoutTarget()
+    public function testJumpToEventsExecutedWithoutTarget(): void
     {
         $campaign = new Campaign();
 
@@ -240,13 +227,11 @@ class EventExecutionerTest extends \PHPUnit_Framework_TestCase
             ->setCampaign($campaign)
             ->setProperties(['jumpToEvent' => 999]);
 
-        $lead = $this->getMockBuilder(Lead::class)
-            ->getMock();
+        $lead = $this->createMock(Lead::class);
         $lead->method('getId')
             ->willReturn(1);
 
-        $log = $this->getMockBuilder(LeadEventLog::class)
-            ->getMock();
+        $log = $this->createMock(LeadEventLog::class);
         $log->method('getLead')
             ->willReturn($lead);
         $log->method('setIsScheduled')
@@ -267,7 +252,7 @@ class EventExecutionerTest extends \PHPUnit_Framework_TestCase
                 'label'                  => 'mautic.campaign.event.jump_to_event',
                 'description'            => 'mautic.campaign.event.jump_to_event_descr',
                 'formType'               => CampaignEventJumpToEventType::class,
-                'template'               => 'MauticCampaignBundle:Event:jump.html.php',
+                'template'               => '@MauticCampaign/Event/jump.html.twig',
                 'batchEventName'         => CampaignEvents::ON_EVENT_JUMP_TO_EVENT,
                 'connectionRestrictions' => [
                     'target' => [
@@ -284,7 +269,15 @@ class EventExecutionerTest extends \PHPUnit_Framework_TestCase
         $this->eventRepository->method('getEntities')
             ->willReturn([]);
 
-        $subscriber = new CampaignActionJumpToEventSubscriber($this->eventRepository, $this->getEventExecutioner(), $this->translator);
+        $eventScheduler = $this->createMock(EventScheduler::class);
+
+        $subscriber = new CampaignActionJumpToEventSubscriber(
+            $this->eventRepository,
+            $this->getEventExecutioner(),
+            $this->translator,
+            $this->leadRepository,
+            $eventScheduler
+        );
         $subscriber->onJumpToEvent($pendingEvent);
 
         $this->assertEquals(count($pendingEvent->getSuccessful()), 1);

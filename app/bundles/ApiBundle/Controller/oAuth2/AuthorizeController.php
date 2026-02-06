@@ -1,77 +1,76 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ApiBundle\Controller\oAuth2;
 
-use FOS\OAuthServerBundle\Event\OAuthEvent;
+use FOS\OAuthServerBundle\Form\Handler\AuthorizeFormHandler;
+use FOS\OAuthServerBundle\Model\ClientManagerInterface;
+use OAuth2\OAuth2;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Form\Form;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
-use Symfony\Component\Security\Core\User\UserInterface;
+use Twig\Environment;
+use Twig\Error\LoaderError;
+use Twig\Error\RuntimeError;
+use Twig\Error\SyntaxError;
 
-/**
- * Class AuthorizeController.
- */
 class AuthorizeController extends \FOS\OAuthServerBundle\Controller\AuthorizeController
 {
+    private TokenStorageInterface $tokenStorage;
+
     /**
-     * Authorize.
-     *
-     * @param Request $request
-     *
-     * @return \FOS\OAuthServerBundle\Controller\Response|\Symfony\Component\HttpFoundation\Response
-     *
-     * @throws \OAuth2\OAuth2RedirectException
-     * @throws AccessDeniedException
-     *
-     * @author Chris Jones <leeked@gmail.com>
+     * This constructor must be duplicated from the extended class so our custom code could access the properties.
      */
-    public function authorizeAction(Request $request)
+    public function __construct(
+        RequestStack $requestStack,
+        Form $authorizeForm,
+        OAuth2 $oAuth2Server,
+        TokenStorageInterface $tokenStorage,
+        UrlGeneratorInterface $router,
+        ClientManagerInterface $clientManager,
+        EventDispatcherInterface $eventDispatcher,
+    ) {
+        parent::__construct(
+            $requestStack,
+            $authorizeForm,
+            $oAuth2Server,
+            $tokenStorage,
+            $router,
+            $clientManager,
+            $eventDispatcher
+        );
+
+        $this->tokenStorage = $tokenStorage;
+    }
+
+    /**
+     * @param array<string , mixed> $data Various data to be passed to the twig template
+     *
+     * @throws LoaderError
+     * @throws RuntimeError
+     * @throws SyntaxError
+     */
+    protected function renderAuthorize(array $data, Environment $twig): Response
     {
-        $user = $this->container->get('security.context')->getToken()->getUser();
-
-        if (!$user instanceof UserInterface) {
-            throw new AccessDeniedException('This user does not have access to this section.');
-        }
-
-        if (true === $this->container->get('session')->get('_fos_oauth_server.ensure_logout')) {
-            $this->container->get('session')->invalidate(600);
-            $this->container->get('session')->set('_fos_oauth_server.ensure_logout', true);
-        }
-
-        $form        = $this->container->get('fos_oauth_server.authorize.form');
-        $formHandler = $this->container->get('fos_oauth_server.authorize.form.handler');
-
-        $event = $this->container->get('event_dispatcher')->dispatch(
-            OAuthEvent::PRE_AUTHORIZATION_PROCESS,
-            new OAuthEvent($user, $this->getClient())
+        $response = $twig->render(
+            '@MauticApi/Authorize/oAuth2/authorize.html.twig',
+            $data
         );
 
-        if ($event->isAuthorizedClient()) {
-            $scope = $request->get('scope', null);
+        return new Response($response);
+    }
 
-            return $this->container
-                ->get('fos_oauth_server.server')
-                ->finishClientAuthorization(true, $user, $request, $scope);
+    public function authorizeAction(Request $request, AuthorizeFormHandler $formHandler, Environment $twig): Response
+    {
+        // The parent bundle does not care about token being empty.
+        if (null === $this->tokenStorage->getToken()) {
+            throw new AccessDeniedException('This user does not have access to this section. No token.');
         }
 
-        if (true === $formHandler->process()) {
-            return $this->processSuccess($user, $formHandler, $request);
-        }
-
-        return $this->container->get('templating')->renderResponse(
-            'MauticApiBundle:Authorize:oAuth2/authorize.html.php',
-            [
-                'form'   => $form->createView(),
-                'client' => $this->getClient(),
-            ]
-        );
+        return parent::authorizeAction($request, $formHandler, $twig);
     }
 }

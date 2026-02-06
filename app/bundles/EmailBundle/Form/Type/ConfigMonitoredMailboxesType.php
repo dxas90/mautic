@@ -1,18 +1,14 @@
 <?php
 
-/*
- * @copyright   2015 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\EmailBundle\Form\Type;
 
+use Mautic\CoreBundle\Form\Type\StandAloneButtonType;
+use Mautic\CoreBundle\Form\Type\YesNoButtonGroupType;
 use Mautic\EmailBundle\MonitoredEmail\Mailbox;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\PasswordType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Form\FormView;
@@ -20,37 +16,23 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\Validator\Constraints\Email;
 
 /**
- * Class ConfigType.
+ * @extends AbstractType<mixed>
  */
 class ConfigMonitoredMailboxesType extends AbstractType
 {
-    /**
-     * @var Mailbox
-     */
-    private $imapHelper;
-
-    /**
-     * ConfigMonitoredMailboxesType constructor.
-     *
-     * @param Mailbox $imapHelper
-     */
-    public function __construct(Mailbox $imapHelper)
-    {
-        $this->imapHelper = $imapHelper;
+    public function __construct(
+        private Mailbox $imapHelper,
+    ) {
     }
 
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $monitoredShowOn = ($options['mailbox'] == 'general') ? '{}'
+        $monitoredShowOn = ('general' == $options['mailbox']) ? '{}'
             : '{"config_emailconfig_monitored_email_'.$options['mailbox'].'_override_settings_1": "checked"}';
 
         $builder->add(
             'address',
-            'text',
+            TextType::class,
             [
                 'label'      => 'mautic.email.config.monitored_email_address',
                 'label_attr' => ['class' => 'control-label'],
@@ -72,7 +54,7 @@ class ConfigMonitoredMailboxesType extends AbstractType
 
         $builder->add(
             'host',
-            'text',
+            TextType::class,
             [
                 'label'      => 'mautic.email.config.monitored_email_host',
                 'label_attr' => ['class' => 'control-label'],
@@ -87,7 +69,7 @@ class ConfigMonitoredMailboxesType extends AbstractType
 
         $builder->add(
             'port',
-            'text',
+            TextType::class,
             [
                 'label'      => 'mautic.email.config.monitored_email_port',
                 'label_attr' => ['class' => 'control-label'],
@@ -105,13 +87,13 @@ class ConfigMonitoredMailboxesType extends AbstractType
         if (extension_loaded('openssl')) {
             $builder->add(
                 'encryption',
-                'choice',
+                ChoiceType::class,
                 [
-                    'choices' => [
-                        '/ssl'                 => 'mautic.email.config.mailer_encryption.ssl',
-                        '/ssl/novalidate-cert' => 'mautic.email.config.monitored_email_encryption.ssl_novalidate',
-                        '/tls'                 => 'mautic.email.config.mailer_encryption.tls',
-                        '/tls/novalidate-cert' => 'mautic.email.config.monitored_email_encryption.tls_novalidate',
+                    'choices'           => [
+                        'mautic.email.config.mailer_encryption.ssl'                     => '/ssl',
+                        'mautic.email.config.monitored_email_encryption.ssl_novalidate' => '/ssl/novalidate-cert',
+                        'mautic.email.config.mailer_encryption.tls'                     => '/tls',
+                        'mautic.email.config.monitored_email_encryption.tls_novalidate' => '/tls/novalidate-cert',
                     ],
                     'label'    => 'mautic.email.config.monitored_email_encryption',
                     'required' => false,
@@ -120,15 +102,15 @@ class ConfigMonitoredMailboxesType extends AbstractType
                         'data-show-on' => $monitoredShowOn,
                         'tooltip'      => 'mautic.email.config.monitored_email_encryption.tooltip',
                     ],
-                    'empty_value' => 'mautic.email.config.mailer_encryption.none',
-                    'data'        => (isset($options['data']['encryption'])) ? $options['data']['encryption'] : '/ssl',
+                    'placeholder' => 'mautic.email.config.mailer_encryption.none',
+                    'data'        => $options['data']['encryption'] ?? '/ssl',
                 ]
             );
         }
 
         $builder->add(
             'user',
-            'text',
+            TextType::class,
             [
                 'label'      => 'mautic.email.config.monitored_email_user',
                 'label_attr' => ['class' => 'control-label'],
@@ -144,14 +126,14 @@ class ConfigMonitoredMailboxesType extends AbstractType
 
         $builder->add(
             'password',
-            'password',
+            PasswordType::class,
             [
                 'label'      => 'mautic.email.config.monitored_email_password',
                 'label_attr' => ['class' => 'control-label'],
                 'attr'       => [
                     'class'        => 'form-control',
                     'placeholder'  => 'mautic.user.user.form.passwordplaceholder',
-                    'preaddon'     => 'fa fa-lock',
+                    'preaddon'     => 'ri-lock-fill',
                     'tooltip'      => 'mautic.email.config.monitored_email_password.tooltip',
                     'autocomplete' => 'off',
                     'data-show-on' => $monitoredShowOn,
@@ -160,10 +142,10 @@ class ConfigMonitoredMailboxesType extends AbstractType
             ]
         );
 
-        if ($options['mailbox'] != 'general') {
+        if ('general' != $options['mailbox']) {
             $builder->add(
                 'override_settings',
-                'yesno_button_group',
+                YesNoButtonGroupType::class,
                 [
                     'label'      => 'mautic.email.config.monitored_email_override_settings',
                     'label_attr' => ['class' => 'control-label'],
@@ -190,7 +172,7 @@ class ConfigMonitoredMailboxesType extends AbstractType
                 try {
                     $folders = $this->imapHelper->getListingFolders();
                     $choices = array_combine($folders, $folders);
-                } catch (\Exception $e) {
+                } catch (\Exception) {
                     // If the connection failed - add back the selected folder just in case it's a temporary connection issue
                     if (!empty($options['data']['folder'])) {
                         $choices[$options['data']['folder']] = $options['data']['folder'];
@@ -200,12 +182,12 @@ class ConfigMonitoredMailboxesType extends AbstractType
 
             $builder->add(
                 'folder',
-                'choice',
+                ChoiceType::class,
                 [
-                    'choices'    => $choices,
-                    'label'      => 'mautic.email.config.monitored_email_folder',
-                    'label_attr' => ['class' => 'control-label'],
-                    'attr'       => array_merge(
+                    'choices'           => $choices,
+                    'label'             => 'mautic.email.config.monitored_email_folder',
+                    'label_attr'        => ['class' => 'control-label'],
+                    'attr'              => array_merge(
                         [
                             'class'             => 'form-control',
                             'tooltip'           => 'mautic.email.config.monitored_email_folder.tooltip',
@@ -221,38 +203,29 @@ class ConfigMonitoredMailboxesType extends AbstractType
 
         $builder->add(
             'test_connection_button',
-            'standalone_button',
+            StandAloneButtonType::class,
             [
                 'label'    => 'mautic.email.config.monitored_email.test_connection',
                 'required' => false,
                 'attr'     => [
-                    'class'   => 'btn btn-success',
+                    'class'   => 'btn btn-tertiary btn-sm',
                     'onclick' => 'Mautic.testMonitoredEmailServerConnection(\''.$options['mailbox'].'\')',
                 ],
             ]
         );
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setRequired(['mailbox', 'default_folder', 'general_settings']);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function buildView(FormView $view, FormInterface $form, array $options)
+    public function buildView(FormView $view, FormInterface $form, array $options): void
     {
         $view->vars['mailbox'] = $options['mailbox'];
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getBlockPrefix(): string
     {
         return 'monitored_mailboxes';
     }

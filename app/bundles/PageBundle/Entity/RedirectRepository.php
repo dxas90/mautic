@@ -1,27 +1,15 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\PageBundle\Entity;
 
 use Mautic\CoreBundle\Entity\CommonRepository;
-use Mautic\EmailBundle\Entity\Email;
 
 /**
- * Class RedirectRepository.
+ * @extends CommonRepository<Redirect>
  */
 class RedirectRepository extends CommonRepository
 {
     /**
-     * @param array $urls
-     *
      * @return array
      */
     public function findByUrls(array $urls)
@@ -39,44 +27,12 @@ class RedirectRepository extends CommonRepository
     }
 
     /**
-     * @param array $ids
-     * @param Email $email
-     *
-     * @return array
-     */
-    public function findByIds(array $ids, Email $email = null)
-    {
-        $q = $this->createQueryBuilder('r');
-
-        $expr = $q->expr()->andX(
-            $q->expr()->in('r.id', ':ids')
-        );
-
-        if ($email === null) {
-            $expr->add(
-                $q->expr()->isNull('r.email')
-            );
-        } else {
-            $expr->add(
-                $q->expr()->eq('r.email', ':email')
-            );
-            $q->setParameter('email', $email);
-        }
-
-        $q->where($expr)
-            ->setParameter('ids', $ids);
-
-        return $q->getQuery()->getResult();
-    }
-
-    /**
      * Up the hit count.
      *
-     * @param            $id
      * @param int        $increaseBy
      * @param bool|false $unique
      */
-    public function upHitCount($id, $increaseBy = 1, $unique = false)
+    public function upHitCount($id, $increaseBy = 1, $unique = false): void
     {
         $q = $this->getEntityManager()->getConnection()->createQueryBuilder();
 
@@ -88,19 +44,15 @@ class RedirectRepository extends CommonRepository
             $q->set('unique_hits', 'unique_hits + '.(int) $increaseBy);
         }
 
-        $q->execute();
+        $q->executeStatement();
     }
 
     /**
-     * @param int       $limit
-     * @param \DateTime $dateFrom
-     * @param \DateTime $dateTo
-     * @param int|null  $createdByUserId
-     * @param int|null  $companyId
-     * @param int|null  $campaignId
-     * @param int|null  $segmentId
-     *
-     * @return array
+     * @param int      $limit
+     * @param int|null $createdByUserId
+     * @param int|null $companyId
+     * @param int|null $campaignId
+     * @param int|null $segmentId
      */
     public function getMostHitEmailRedirects(
         $limit,
@@ -109,20 +61,20 @@ class RedirectRepository extends CommonRepository
         $createdByUserId = null,
         $companyId = null,
         $campaignId = null,
-        $segmentId = null
-    ) {
+        $segmentId = null,
+    ): array {
         $q = $this->getEntityManager()->getConnection()->createQueryBuilder();
         $q->addSelect('pr.url')
             ->addSelect('count(ph.id) as hits')
             ->addSelect('count(distinct ph.tracking_id) as unique_hits')
             ->from(MAUTIC_TABLE_PREFIX.'page_hits', 'ph')
             ->join('ph', MAUTIC_TABLE_PREFIX.'page_redirects', 'pr', 'pr.id = ph.redirect_id')
-            ->join('ph', MAUTIC_TABLE_PREFIX.'email_stats', 'es', 'ph.source = "email" and ph.source_id = es.email_id and ph.lead_id = es.lead_id')
+            ->join('ph', MAUTIC_TABLE_PREFIX.'email_stats', 'es', 'ph.source = \'email\' and ph.source_id = es.email_id and ph.lead_id = es.lead_id')
             ->join('es', MAUTIC_TABLE_PREFIX.'emails', 'e', 'es.email_id = e.id')
             ->addSelect('e.id AS email_id')
             ->addSelect('e.name AS email_name');
 
-        if ($createdByUserId !== null) {
+        if (null !== $createdByUserId) {
             $q->andWhere('e.created_by = :userId')
                 ->setParameter('userId', $createdByUserId);
         }
@@ -136,18 +88,18 @@ class RedirectRepository extends CommonRepository
             ->addSelect('campaign.id AS campaign_id')
             ->addSelect('campaign.name AS campaign_name');
 
-        if ($campaignId !== null) {
+        if (null !== $campaignId) {
             $q->andWhere('ce.campaign_id = :campaignId')
                 ->setParameter('campaignId', $campaignId);
         }
 
-        if ($companyId !== null) {
+        if (!empty($companyId)) {
             $sb = $this->getEntityManager()->getConnection()->createQueryBuilder();
 
             $sb->select('null')
                 ->from(MAUTIC_TABLE_PREFIX.'companies_leads', 'cl')
                 ->where(
-                    $sb->expr()->andX(
+                    $sb->expr()->and(
                         $sb->expr()->eq('cl.company_id', ':companyId'),
                         $sb->expr()->eq('cl.lead_id', 'ph.lead_id')
                     )
@@ -159,13 +111,13 @@ class RedirectRepository extends CommonRepository
                 ->setParameter('companyId', $companyId);
         }
 
-        if ($segmentId !== null) {
+        if (null !== $segmentId) {
             $sb = $this->getEntityManager()->getConnection()->createQueryBuilder();
 
             $sb->select('null')
                 ->from(MAUTIC_TABLE_PREFIX.'lead_lists_leads', 'lll')
                 ->where(
-                    $sb->expr()->andX(
+                    $sb->expr()->and(
                         $sb->expr()->eq('lll.leadlist_id', ':segmentId'),
                         $sb->expr()->eq('lll.lead_id', 'ph.lead_id'),
                         $sb->expr()->eq('lll.manually_removed', 0)
@@ -184,6 +136,6 @@ class RedirectRepository extends CommonRepository
 
         $q->orderBy('hits', 'DESC');
 
-        return $q->execute()->fetchAll();
+        return $q->executeQuery()->fetchAllAssociative();
     }
 }

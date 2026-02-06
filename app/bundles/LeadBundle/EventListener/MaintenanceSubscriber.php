@@ -1,55 +1,29 @@
 <?php
 
-/*
- * @copyright   2016 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\EventListener;
 
 use Doctrine\DBAL\Connection;
 use Mautic\CoreBundle\CoreEvents;
 use Mautic\CoreBundle\Event\MaintenanceEvent;
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
-/**
- * Class MaintenanceSubscriber.
- */
-class MaintenanceSubscriber extends CommonSubscriber
+class MaintenanceSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var Connection
-     */
-    protected $db;
-
-    /**
-     * MaintenanceSubscriber constructor.
-     *
-     * @param Connection $db
-     */
-    public function __construct(Connection $db)
-    {
-        $this->db = $db;
+    public function __construct(
+        private Connection $db,
+        private TranslatorInterface $translator,
+    ) {
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             CoreEvents::MAINTENANCE_CLEANUP_DATA => ['onDataCleanup', 0],
         ];
     }
 
-    /**
-     * @param MaintenanceEvent $event
-     */
-    public function onDataCleanup(MaintenanceEvent $event)
+    public function onDataCleanup(MaintenanceEvent $event): void
     {
         $qb = $this->db->createQueryBuilder()
             ->setParameter('date', $event->getDate()->format('Y-m-d H:i:s'));
@@ -59,29 +33,29 @@ class MaintenanceSubscriber extends CommonSubscriber
               ->from(MAUTIC_TABLE_PREFIX.'leads', 'l')
               ->where($qb->expr()->lte('l.last_active', ':date'));
 
-            if ($event->isGdpr() === false) {
+            if (false === $event->isGdpr()) {
                 $qb->andWhere($qb->expr()->isNull('l.date_identified'));
             } else {
                 $qb->orWhere(
-                  $qb->expr()->andX(
-                    $qb->expr()->lte('l.date_added', ':date2'),
-                    $qb->expr()->isNull('l.last_active')
-                  ));
+                    $qb->expr()->and(
+                        $qb->expr()->lte('l.date_added', ':date2'),
+                        $qb->expr()->isNull('l.last_active')
+                    ));
                 $qb->setParameter('date2', $event->getDate()->format('Y-m-d H:i:s'));
             }
-            $rows = $qb->execute()->fetchColumn();
+            $rows = $qb->executeQuery()->fetchOne();
         } else {
             $qb->select('l.id')->from(MAUTIC_TABLE_PREFIX.'leads', 'l')
               ->where($qb->expr()->lte('l.last_active', ':date'));
 
-            if ($event->isGdpr() === false) {
+            if (false === $event->isGdpr()) {
                 $qb->andWhere($qb->expr()->isNull('l.date_identified'));
             } else {
                 $qb->orWhere(
-                  $qb->expr()->andX(
-                    $qb->expr()->lte('l.date_added', ':date2'),
-                    $qb->expr()->isNull('l.last_active')
-                  ));
+                    $qb->expr()->and(
+                        $qb->expr()->lte('l.date_added', ':date2'),
+                        $qb->expr()->isNull('l.last_active')
+                    ));
                 $qb->setParameter('date2', $event->getDate()->format('Y-m-d H:i:s'));
             }
 
@@ -90,17 +64,17 @@ class MaintenanceSubscriber extends CommonSubscriber
 
             $qb2 = $this->db->createQueryBuilder();
             while (true) {
-                $leadsIds = array_column($qb->execute()->fetchAll(), 'id');
-                if (sizeof($leadsIds) === 0) {
+                $leadsIds = array_column($qb->executeQuery()->fetchAllAssociative(), 'id');
+                if (0 === sizeof($leadsIds)) {
                     break;
                 }
                 foreach ($leadsIds as $leadId) {
                     $rows += $qb2->delete(MAUTIC_TABLE_PREFIX.'leads')
                       ->where(
-                        $qb2->expr()->eq(
-                          'id', $leadId
-                        )
-                      )->execute();
+                          $qb2->expr()->eq(
+                              'id', $leadId
+                          )
+                      )->executeStatement();
                 }
             }
         }

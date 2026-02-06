@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\EmailBundle\Tests\MonitoredEmail\Processor;
 
 use Mautic\CoreBundle\Translation\Translator;
@@ -19,25 +10,17 @@ use Mautic\EmailBundle\MonitoredEmail\Processor\FeedbackLoop;
 use Mautic\EmailBundle\MonitoredEmail\Search\ContactFinder;
 use Mautic\EmailBundle\MonitoredEmail\Search\Result;
 use Mautic\LeadBundle\Entity\Lead;
-use Mautic\LeadBundle\Model\LeadModel;
+use Mautic\LeadBundle\Model\DoNotContact;
 use Monolog\Logger;
 
-class FeedbackLoopTest extends \PHPUnit_Framework_TestCase
+#[\PHPUnit\Framework\Attributes\CoversClass(FeedbackLoop::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(Result::class)]
+class FeedbackLoopTest extends \PHPUnit\Framework\TestCase
 {
-    /**
-     * @testdox Test that the message is processed appropriately
-     *
-     * @covers  \Mautic\EmailBundle\MonitoredEmail\Processor\FeedbackLoop::process()
-     * @covers  \Mautic\EmailBundle\MonitoredEmail\Search\Result::setStat()
-     * @covers  \Mautic\EmailBundle\MonitoredEmail\Search\Result::getStat()
-     * @covers  \Mautic\EmailBundle\MonitoredEmail\Search\Result::setContacts()
-     * @covers  \Mautic\EmailBundle\MonitoredEmail\Search\Result::getContacts()
-     */
-    public function testContactIsFoundFromMessage()
+    #[\PHPUnit\Framework\Attributes\TestDox('Test that the message is processed appropriately')]
+    public function testContactIsFoundFromMessage(): void
     {
-        $contactFinder = $this->getMockBuilder(ContactFinder::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $contactFinder = $this->createMock(ContactFinder::class);
         $contactFinder->method('find')
             ->willReturnCallback(
                 function ($email) {
@@ -62,21 +45,13 @@ class FeedbackLoopTest extends \PHPUnit_Framework_TestCase
                 }
             );
 
-        $leadModel = $this->getMockBuilder(LeadModel::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-        $leadModel->expects($this->once())
-            ->method('addDncForLead');
+        $translator = $this->createMock(Translator::class);
 
-        $translator = $this->getMockBuilder(Translator::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $logger = $this->createMock(Logger::class);
 
-        $logger = $this->getMockBuilder(Logger::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $doNotContact = $this->createMock(DoNotContact::class);
 
-        $processor = new FeedbackLoop($contactFinder, $leadModel, $translator, $logger);
+        $processor = new FeedbackLoop($contactFinder, $translator, $logger, $doNotContact);
 
         $message            = new Message();
         $message->fblReport = <<<'BODY'

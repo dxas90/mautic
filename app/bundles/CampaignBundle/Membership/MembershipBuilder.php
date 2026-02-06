@@ -1,111 +1,40 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Membership;
 
 use Mautic\CampaignBundle\Entity\Campaign;
-use Mautic\CampaignBundle\Entity\LeadRepository as CampaignMemberRepository;
+use Mautic\CampaignBundle\Entity\LeadRepository as CampaignLeadRepository;
 use Mautic\CampaignBundle\Executioner\ContactFinder\Limiter\ContactLimiter;
 use Mautic\CampaignBundle\Membership\Exception\RunLimitReachedException;
 use Mautic\CoreBundle\Helper\ProgressBarHelper;
 use Mautic\LeadBundle\Entity\LeadRepository;
-use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\Translation\TranslatorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class MembershipBuilder
 {
-    /**
-     * @var MembershipManager
-     */
-    private $manager;
+    private ?Campaign $campaign = null;
 
-    /**
-     * @var CampaignMemberRepository
-     */
-    private $campaignMemberRepository;
+    private ?ContactLimiter $contactLimiter = null;
 
-    /**
-     * @var LeadRepository
-     */
-    private $leadRepository;
+    private ?int $runLimit = null;
 
-    /**
-     * @var EventDispatcherInterface
-     */
-    private $eventDispatcher;
+    private ?OutputInterface $output = null;
 
-    /**
-     * @var TranslatorInterface
-     */
-    private $translator;
+    private ?\Symfony\Component\Console\Helper\ProgressBar $progressBar = null;
 
-    /**
-     * @var Campaign
-     */
-    private $campaign;
-
-    /**
-     * @var ContactLimiter
-     */
-    private $contactLimiter;
-
-    /**
-     * @var int
-     */
-    private $runLimit;
-
-    /**
-     * @var OutputInterface|null
-     */
-    private $output;
-
-    /**
-     * @var ProgressBar|null
-     */
-    private $progressBar;
-
-    /**
-     * MembershipBuilder constructor.
-     *
-     * @param MembershipManager        $manager
-     * @param CampaignMemberRepository $campaignMemberRepository
-     * @param LeadRepository           $leadRepository
-     * @param EventDispatcherInterface $eventDispatcher
-     * @param TranslatorInterface      $translator
-     */
     public function __construct(
-        MembershipManager $manager,
-        CampaignMemberRepository $campaignMemberRepository,
-        LeadRepository $leadRepository,
-        EventDispatcherInterface $eventDispatcher,
-        TranslatorInterface $translator
+        private MembershipManager $manager,
+        private CampaignLeadRepository $campaignLeadRepository,
+        private LeadRepository $leadRepository,
+        private TranslatorInterface $translator,
     ) {
-        $this->manager                  = $manager;
-        $this->campaignMemberRepository = $campaignMemberRepository;
-        $this->leadRepository           = $leadRepository;
-        $this->eventDispatcher          = $eventDispatcher;
-        $this->translator               = $translator;
     }
 
     /**
-     * @param Campaign             $campaign
-     * @param ContactLimiter       $contactLimiter
-     * @param int                  $runLimit
-     * @param OutputInterface|null $output
-     *
-     * @return int
+     * @param int $runLimit
      */
-    public function build(Campaign $campaign, ContactLimiter $contactLimiter, $runLimit, OutputInterface $output = null)
+    public function build(Campaign $campaign, ContactLimiter $contactLimiter, $runLimit, ?OutputInterface $output = null): int
     {
         defined('MAUTIC_REBUILDING_CAMPAIGNS') or define('MAUTIC_REBUILDING_CAMPAIGNS', 1);
 
@@ -132,19 +61,19 @@ class MembershipBuilder
     }
 
     /**
-     * @param $totalContactsProcessed
-     *
-     * @return int
+     * Add contacts to a campaign.
      *
      * @throws RunLimitReachedException
      */
-    private function addNewlyQualifiedMembers($totalContactsProcessed)
+    private function addNewlyQualifiedMembers(int $totalContactsProcessed): int
     {
-        $progress          = null;
         $contactsProcessed = 0;
 
         if ($this->output) {
-            $countResult = $this->campaignMemberRepository->getCountsForCampaignContactsBySegment($this->campaign->getId(), $this->contactLimiter, $this->campaign->allowRestart());
+            $countResult = $this->campaignLeadRepository->getCountsForCampaignContactsBySegment(
+                $this->campaign->getId(),
+                $this->contactLimiter
+            );
 
             $this->output->writeln(
                 $this->translator->trans(
@@ -153,7 +82,7 @@ class MembershipBuilder
                 )
             );
 
-            if ($countResult->getCount() === 0) {
+            if (0 === $countResult->getCount()) {
                 // No use continuing
                 return 0;
             }
@@ -161,22 +90,28 @@ class MembershipBuilder
             $this->startProgressBar($countResult->getCount());
         }
 
-        $contacts = $this->campaignMemberRepository->getCampaignContactsBySegments($this->campaign->getId(), $this->contactLimiter, $this->campaign->allowRestart());
+        $contacts = $this->campaignLeadRepository->getCampaignContactsBySegments(
+            $this->campaign->getId(),
+            $this->contactLimiter,
+            $this->campaign->allowRestart()
+        );
 
         while (count($contacts)) {
+            // get an array of contact entities based on the contact id
             $contactCollection = $this->leadRepository->getContactCollection($contacts);
-            if (!$contactCollection->count()) {
+            if ($contactCollection->count() <= 0) {
                 // Prevent endless loop just in case
                 break;
             }
 
+            // increase the total nr of contacts processed by this batch
             $contactsProcessed += $contactCollection->count();
 
             // Add the contacts to this segment
             $this->manager->addContacts($contactCollection, $this->campaign, false);
 
             // Clear Lead entities from RAM
-            $this->leadRepository->clear();
+            $this->leadRepository->detachEntities($contactCollection->toArray());
 
             // Have we hit the run limit?
             if ($this->runLimit && $contactsProcessed >= $this->runLimit) {
@@ -185,7 +120,11 @@ class MembershipBuilder
             }
 
             // Get next batch
-            $contacts = $this->campaignMemberRepository->getCampaignContactsBySegments($this->campaign->getId(), $this->contactLimiter);
+            $contacts = $this->campaignLeadRepository->getCampaignContactsBySegments(
+                $this->campaign->getId(),
+                $this->contactLimiter,
+                $this->campaign->allowRestart()
+            );
         }
 
         $this->finishProgressBar();
@@ -194,19 +133,14 @@ class MembershipBuilder
     }
 
     /**
-     * @param $totalContactsProcessed
-     *
-     * @return int
-     *
      * @throws RunLimitReachedException
      */
-    private function removeUnqualifiedMembers($totalContactsProcessed)
+    private function removeUnqualifiedMembers(int $totalContactsProcessed): int
     {
-        $progress          = null;
         $contactsProcessed = 0;
 
         if ($this->output) {
-            $countResult = $this->campaignMemberRepository->getCountsForOrphanedContactsBySegments($this->campaign->getId(), $this->contactLimiter);
+            $countResult = $this->campaignLeadRepository->getCountsForOrphanedContactsBySegments($this->campaign->getId(), $this->contactLimiter);
 
             $this->output->writeln(
                 $this->translator->trans(
@@ -215,7 +149,7 @@ class MembershipBuilder
                 )
             );
 
-            if ($countResult->getCount() === 0) {
+            if (0 === $countResult->getCount()) {
                 // No use continuing
                 return 0;
             }
@@ -223,7 +157,7 @@ class MembershipBuilder
             $this->startProgressBar($countResult->getCount());
         }
 
-        $contacts = $this->campaignMemberRepository->getOrphanedContacts($this->campaign->getId(), $this->contactLimiter);
+        $contacts = $this->campaignLeadRepository->getOrphanedContacts($this->campaign->getId(), $this->contactLimiter);
         while (count($contacts)) {
             $contactCollection = $this->leadRepository->getContactCollection($contacts);
             if (!$contactCollection->count()) {
@@ -237,7 +171,7 @@ class MembershipBuilder
             $this->manager->removeContacts($contactCollection, $this->campaign, true);
 
             // Clear Lead entities from RAM
-            $this->leadRepository->clear();
+            $this->leadRepository->detachEntities($contactCollection->toArray());
 
             // Have we hit the run limit?
             if ($this->runLimit && $contactsProcessed >= $this->runLimit) {
@@ -246,7 +180,7 @@ class MembershipBuilder
             }
 
             // Get next batch
-            $contacts = $this->campaignMemberRepository->getOrphanedContacts($this->campaign->getId(), $this->contactLimiter);
+            $contacts = $this->campaignLeadRepository->getOrphanedContacts($this->campaign->getId(), $this->contactLimiter);
         }
 
         $this->finishProgressBar();
@@ -254,10 +188,7 @@ class MembershipBuilder
         return $contactsProcessed;
     }
 
-    /**
-     * @param $total
-     */
-    private function startProgressBar($total)
+    private function startProgressBar(int $total): void
     {
         if (!$this->output) {
             $this->progressBar = null;
@@ -273,7 +204,7 @@ class MembershipBuilder
         $this->manager->setProgressBar($this->progressBar);
     }
 
-    private function finishProgressBar()
+    private function finishProgressBar(): void
     {
         if ($this->progressBar) {
             $this->progressBar->finish();

@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Tests\Membership;
 
 use Mautic\CampaignBundle\CampaignEvents;
@@ -19,32 +10,32 @@ use Mautic\CampaignBundle\Membership\EventDispatcher;
 use Mautic\LeadBundle\Entity\Lead;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
-class EventDispatcherTest extends \PHPUnit_Framework_TestCase
+class EventDispatcherTest extends \PHPUnit\Framework\TestCase
 {
     /**
-     * @var EventDispatcherInterface|\PHPUnit_Framework_MockObject_MockObject
+     * @var EventDispatcherInterface|\PHPUnit\Framework\MockObject\MockObject
      */
-    private $eventDispatcher;
+    private \PHPUnit\Framework\MockObject\MockObject $eventDispatcher;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->eventDispatcher = $this->createMock(EventDispatcherInterface::class);
     }
 
-    public function testLeadChangeEventDispatched()
+    public function testLeadChangeEventDispatched(): void
     {
         $this->eventDispatcher->expects($this->once())
             ->method('dispatch')
-            ->with(CampaignEvents::CAMPAIGN_ON_LEADCHANGE, $this->isInstanceOf(CampaignLeadChangeEvent::class));
+            ->with($this->isInstanceOf(CampaignLeadChangeEvent::class), CampaignEvents::CAMPAIGN_ON_LEADCHANGE);
 
         $this->getDispatcher()->dispatchMembershipChange(new Lead(), new Campaign(), Adder::NAME);
     }
 
-    public function testBatchChangeEventDispatched()
+    public function testBatchChangeEventDispatched(): void
     {
         $this->eventDispatcher->expects($this->once())
             ->method('dispatch')
-            ->with(CampaignEvents::LEAD_CAMPAIGN_BATCH_CHANGE, $this->isInstanceOf(CampaignLeadChangeEvent::class));
+            ->with($this->isInstanceOf(CampaignLeadChangeEvent::class), CampaignEvents::LEAD_CAMPAIGN_BATCH_CHANGE);
 
         $this->getDispatcher()->dispatchBatchMembershipChange([new Lead()], new Campaign(), Adder::NAME);
     }

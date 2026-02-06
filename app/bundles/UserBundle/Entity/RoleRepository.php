@@ -1,36 +1,51 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\UserBundle\Entity;
 
 use Doctrine\ORM\Tools\Pagination\Paginator;
 use Mautic\CoreBundle\Entity\CommonRepository;
+use Mautic\CoreBundle\Event\GlobalSearchEvent;
 
 /**
- * RoleRepository.
+ * @extends CommonRepository<Role>
  */
 class RoleRepository extends CommonRepository
 {
     /**
      * Get a list of roles.
      *
-     * @param array $args
-     *
      * @return Paginator
      */
     public function getEntities(array $args = [])
     {
         $q = $this->createQueryBuilder('r');
+        $q->select('r');
+
+        $sq = $this->_em->createQueryBuilder()
+            ->select('count(u.id)')
+            ->from(User::class, 'u')
+            ->where('u.role = r');
+
+        $q->addSelect('('.$sq->getDql().') as user_count');
 
         $args['qb'] = $q;
+
+        return parent::getEntities($args);
+    }
+
+    /**
+     * Get roles for global search without user count subquery.
+     *
+     * @param array<string, string|array<int, array<int|string, int|string|bool|null>>> $filter
+     */
+    public function getEntitiesForGlobalSearch(array $filter): Paginator
+    {
+        $args = [
+            'filter'           => $filter,
+            'start'            => 0,
+            'limit'            => GlobalSearchEvent::RESULTS_LIMIT,
+            'ignore_paginator' => false,
+        ];
 
         return parent::getEntities($args);
     }
@@ -49,7 +64,7 @@ class RoleRepository extends CommonRepository
         $q = $this->_em->createQueryBuilder();
 
         $q->select('partial r.{id, name}')
-            ->from('MauticUserBundle:Role', 'r');
+            ->from(Role::class, 'r');
 
         if (!empty($search)) {
             $q->where('r.name LIKE :search')
@@ -66,10 +81,7 @@ class RoleRepository extends CommonRepository
         return $q->getQuery()->getArrayResult();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function addCatchAllWhereClause($q, $filter)
+    protected function addCatchAllWhereClause($q, $filter): array
     {
         return $this->addStandardCatchAllWhereClause(
             $q,
@@ -81,15 +93,12 @@ class RoleRepository extends CommonRepository
         );
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function addSearchCommandWhereClause($q, $filter)
+    protected function addSearchCommandWhereClause($q, $filter): array
     {
         $command                 = $filter->command;
         $unique                  = $this->generateRandomParameterName();
-        $returnParameter         = false; //returning a parameter that is not used will lead to a Doctrine error
-        list($expr, $parameters) = parent::addSearchCommandWhereClause($q, $filter);
+        $returnParameter         = false; // returning a parameter that is not used will lead to a Doctrine error
+        [$expr, $parameters]     = parent::addSearchCommandWhereClause($q, $filter);
 
         switch ($command) {
             case $this->translator->trans('mautic.user.user.searchcommand.isadmin'):
@@ -121,8 +130,6 @@ class RoleRepository extends CommonRepository
     /**
      * Get a count of users that belong to the role.
      *
-     * @param $roleIds
-     *
      * @return array
      */
     public function getUserCount($roleIds)
@@ -132,7 +139,7 @@ class RoleRepository extends CommonRepository
         $q->select('count(u.id) as thecount, u.role_id')
             ->from(MAUTIC_TABLE_PREFIX.'users', 'u');
 
-        $returnArray = (is_array($roleIds));
+        $returnArray = is_array($roleIds);
 
         if (!$returnArray) {
             $roleIds = [$roleIds];
@@ -143,7 +150,7 @@ class RoleRepository extends CommonRepository
         )
             ->groupBy('u.role_id');
 
-        $result = $q->execute()->fetchAll();
+        $result = $q->executeQuery()->fetchAllAssociative();
 
         $return = [];
         foreach ($result as $r) {
@@ -161,9 +168,9 @@ class RoleRepository extends CommonRepository
     }
 
     /**
-     * {@inheritdoc}
+     * @return string[]
      */
-    public function getSearchCommands()
+    public function getSearchCommands(): array
     {
         $commands = [
             'mautic.user.user.searchcommand.isadmin',
@@ -173,20 +180,14 @@ class RoleRepository extends CommonRepository
         return array_merge($commands, parent::getSearchCommands());
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function getDefaultOrder()
+    protected function getDefaultOrder(): array
     {
         return [
             ['r.name', 'ASC'],
         ];
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getTableAlias()
+    public function getTableAlias(): string
     {
         return 'r';
     }

@@ -1,63 +1,88 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\PointBundle\Entity;
 
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\Mapping as ORM;
 use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
+use Mautic\CoreBundle\Entity\UuidInterface;
+use Mautic\CoreBundle\Entity\UuidTrait;
+use Symfony\Component\Serializer\Attribute\Groups;
 
-/**
- * Class TriggerEvent.
- */
-class TriggerEvent
+#[ApiResource(
+    operations: [
+        new GetCollection(security: "is_granted('point:triggers:viewown')"),
+        new Post(security: "is_granted('point:triggers:create')"),
+        new Get(security: "is_granted('point:triggers:viewown')"),
+        new Put(security: "is_granted('point:triggers:editown')"),
+        new Patch(security: "is_granted('point:triggers:editother')"),
+        new Delete(security: "is_granted('point:triggers:deleteown')"),
+    ],
+    normalizationContext: [
+        'groups'                  => ['trigger_event:read'],
+        'swagger_definition_name' => 'Read',
+    ],
+    denormalizationContext: [
+        'groups'                  => ['trigger_event:write'],
+        'swagger_definition_name' => 'Write',
+    ]
+)]
+class TriggerEvent implements UuidInterface
 {
+    use UuidTrait;
+
     /**
-     * @var int
+     * @var int|null
      */
+    #[Groups(['trigger_event:read'])]
     private $id;
 
     /**
      * @var string
      */
+    #[Groups(['trigger_event:read', 'trigger_event:write'])]
     private $name;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['trigger_event:read', 'trigger_event:write'])]
     private $description;
 
     /**
      * @var string
      */
+    #[Groups(['trigger_event:read', 'trigger_event:write'])]
     private $type;
 
     /**
      * @var int
      */
+    #[Groups(['trigger_event:read', 'trigger_event:write'])]
     private $order = 0;
 
     /**
      * @var array
      */
+    #[Groups(['trigger_event:read', 'trigger_event:write'])]
     private $properties = [];
 
     /**
      * @var Trigger
      */
+    #[Groups(['trigger_event:read', 'trigger_event:write'])]
     private $trigger;
 
     /**
-     * @var ArrayCollection
+     * @var ArrayCollection<int,LeadTriggerLog>
      */
     private $log;
 
@@ -66,23 +91,22 @@ class TriggerEvent
      */
     private $changes;
 
-    /**
-     * Construct.
-     */
+    public function __clone(): void
+    {
+        $this->id = null;
+    }
+
     public function __construct()
     {
         $this->log = new ArrayCollection();
     }
 
-    /**
-     * @param ORM\ClassMetadata $metadata
-     */
-    public static function loadMetadata(ORM\ClassMetadata $metadata)
+    public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
 
         $builder->setTable('point_trigger_events')
-            ->setCustomRepositoryClass('Mautic\PointBundle\Entity\TriggerEventRepository')
+            ->setCustomRepositoryClass(TriggerEventRepository::class)
             ->addIndex(['type'], 'trigger_type_search');
 
         $builder->addIdColumns();
@@ -108,14 +132,14 @@ class TriggerEvent
             ->cascadeRemove()
             ->fetchExtraLazy()
             ->build();
+
+        static::addUuidField($builder);
     }
 
     /**
      * Prepares the metadata for API usage.
-     *
-     * @param $metadata
      */
-    public static function loadApiMetadata(ApiMetadataDriver $metadata)
+    public static function loadApiMetadata(ApiMetadataDriver $metadata): void
     {
         $metadata->setGroupPrefix('trigger')
             ->addProperties(
@@ -131,11 +155,7 @@ class TriggerEvent
             ->build();
     }
 
-    /**
-     * @param $prop
-     * @param $val
-     */
-    private function isChanged($prop, $val)
+    private function isChanged($prop, $val): void
     {
         if ($this->$prop != $val) {
             $this->changes[$prop] = [$this->$prop, $val];
@@ -151,8 +171,6 @@ class TriggerEvent
     }
 
     /**
-     * Get id.
-     *
      * @return int
      */
     public function getId()
@@ -161,8 +179,6 @@ class TriggerEvent
     }
 
     /**
-     * Set order.
-     *
      * @param int $order
      *
      * @return TriggerEvent
@@ -177,8 +193,6 @@ class TriggerEvent
     }
 
     /**
-     * Get order.
-     *
      * @return int
      */
     public function getOrder()
@@ -187,8 +201,6 @@ class TriggerEvent
     }
 
     /**
-     * Set properties.
-     *
      * @param array $properties
      *
      * @return TriggerEvent
@@ -203,8 +215,6 @@ class TriggerEvent
     }
 
     /**
-     * Get properties.
-     *
      * @return array
      */
     public function getProperties()
@@ -213,11 +223,7 @@ class TriggerEvent
     }
 
     /**
-     * Set trigger.
-     *
-     * @param Trigger $trigger
-     *
-     * @return TriggerTriggerEvent
+     * @return self
      */
     public function setTrigger(Trigger $trigger)
     {
@@ -227,8 +233,6 @@ class TriggerEvent
     }
 
     /**
-     * Get trigger.
-     *
      * @return Trigger
      */
     public function getTrigger()
@@ -237,8 +241,6 @@ class TriggerEvent
     }
 
     /**
-     * Set type.
-     *
      * @param string $type
      *
      * @return TriggerEvent
@@ -252,8 +254,6 @@ class TriggerEvent
     }
 
     /**
-     * Get type.
-     *
      * @return string
      */
     public function getType()
@@ -261,17 +261,12 @@ class TriggerEvent
         return $this->type;
     }
 
-    /**
-     * @return array
-     */
-    public function convertToArray()
+    public function convertToArray(): array
     {
         return get_object_vars($this);
     }
 
     /**
-     * Set description.
-     *
      * @param string $description
      *
      * @return TriggerEvent
@@ -285,8 +280,6 @@ class TriggerEvent
     }
 
     /**
-     * Get description.
-     *
      * @return string
      */
     public function getDescription()
@@ -295,8 +288,6 @@ class TriggerEvent
     }
 
     /**
-     * Set name.
-     *
      * @param string $name
      *
      * @return TriggerEvent
@@ -310,8 +301,6 @@ class TriggerEvent
     }
 
     /**
-     * Get name.
-     *
      * @return string
      */
     public function getName()
@@ -320,11 +309,7 @@ class TriggerEvent
     }
 
     /**
-     * Add log.
-     *
-     * @param LeadTriggerLog $log
-     *
-     * @return Log
+     * @return self
      */
     public function addLog(LeadTriggerLog $log)
     {
@@ -333,19 +318,12 @@ class TriggerEvent
         return $this;
     }
 
-    /**
-     * Remove log.
-     *
-     * @param LeadTriggerLog $log
-     */
-    public function removeLog(LeadTriggerLog $log)
+    public function removeLog(LeadTriggerLog $log): void
     {
         $this->log->removeElement($log);
     }
 
     /**
-     * Get log.
-     *
      * @return \Doctrine\Common\Collections\Collection
      */
     public function getLog()

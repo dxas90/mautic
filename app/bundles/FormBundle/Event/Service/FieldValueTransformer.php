@@ -1,57 +1,31 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\FormBundle\Event\Service;
 
 use Mautic\FormBundle\Entity\Field;
 use Mautic\FormBundle\Event\SubmissionEvent;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Routing\RouterInterface;
 
 class FieldValueTransformer
 {
-    /**
-     * @var RouterInterface
-     */
-    private $router;
+    private array $contactFieldsToUpdate = [];
 
-    /**
-     * @var array
-     */
-    private $contactFieldsToUpdate = [];
+    private array $tokensToUpdate = [];
 
-    /**
-     * @var array
-     */
-    private $tokensToUpdate = [];
+    private bool $isTransformed = false;
 
-    /**
-     * @var bool
-     */
-    private $isTransformed = false;
-
-    /**
-     * FieldValueTransformer constructor.
-     *
-     * @param RouterInterface $router
-     */
-    public function __construct(RouterInterface $router)
-    {
-        $this->router = $router;
+    public function __construct(
+        private RouterInterface $router,
+    ) {
     }
 
-    public function transformValuesAfterSubmit(SubmissionEvent $submissionEvent)
+    public function transformValuesAfterSubmit(SubmissionEvent $submissionEvent): void
     {
-        if ($this->isIsTransformed()) {
+        if (true === $this->isTransformed) {
             return;
         }
+
         $fields              = $submissionEvent->getForm()->getFields();
         $contactFieldMatches = $submissionEvent->getContactFieldMatches();
         $tokens              = $submissionEvent->getTokens();
@@ -60,14 +34,13 @@ class FieldValueTransformer
         foreach ($fields as $field) {
             switch ($field->getType()) {
                 case 'file':
-
                     $newValue = $this->router->generate(
                         'mautic_form_file_download',
                         [
                             'submissionId' => $submissionEvent->getSubmission()->getId(),
                             'field'        => $field->getAlias(),
                         ],
-                        true
+                        UrlGeneratorInterface::ABSOLUTE_URL
                     );
 
                     $tokenAlias = "{formfield={$field->getAlias()}}";
@@ -76,8 +49,8 @@ class FieldValueTransformer
                         $this->tokensToUpdate[$tokenAlias] = $tokens[$tokenAlias] = $newValue;
                     }
 
-                    $contactFieldAlias = $field->getLeadField();
-                    if (!empty($contactFieldMatches[$contactFieldAlias])) {
+                    $contactFieldAlias = $field->getMappedField();
+                    if ('contact' === $field->getMappedObject() && !empty($contactFieldMatches[$contactFieldAlias])) {
                         $this->contactFieldsToUpdate[$contactFieldAlias] = $contactFieldMatches[$contactFieldAlias] = $newValue;
                     }
 
@@ -87,7 +60,7 @@ class FieldValueTransformer
 
         $submissionEvent->setTokens($tokens);
         $submissionEvent->setContactFieldMatches($contactFieldMatches);
-        $this->isIsTransformed();
+        $this->isTransformed = true;
     }
 
     /**
@@ -104,13 +77,5 @@ class FieldValueTransformer
     public function getTokensToUpdate()
     {
         return $this->tokensToUpdate;
-    }
-
-    /**
-     * @return bool
-     */
-    public function isIsTransformed()
-    {
-        return $this->isTransformed;
     }
 }

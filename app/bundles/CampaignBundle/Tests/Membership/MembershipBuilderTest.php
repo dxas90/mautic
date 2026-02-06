@@ -1,66 +1,60 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
+declare(strict_types=1);
 
 namespace Mautic\CampaignBundle\Tests\Membership;
 
 use Doctrine\Common\Collections\ArrayCollection;
 use Mautic\CampaignBundle\Entity\Campaign;
-use Mautic\CampaignBundle\Entity\LeadRepository;
+use Mautic\CampaignBundle\Entity\LeadRepository as CampaignMemberRepository;
 use Mautic\CampaignBundle\Executioner\ContactFinder\Limiter\ContactLimiter;
 use Mautic\CampaignBundle\Membership\MembershipBuilder;
 use Mautic\CampaignBundle\Membership\MembershipManager;
 use Mautic\LeadBundle\Entity\Lead;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\Translation\TranslatorInterface;
+use Mautic\LeadBundle\Entity\LeadRepository;
+use PHPUnit\Framework\MockObject\MockObject;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
-class MembershipBuilderTest extends \PHPUnit_Framework_TestCase
+final class MembershipBuilderTest extends \PHPUnit\Framework\TestCase
 {
     /**
-     * @var MembershipManager|\PHPUnit_Framework_MockObject_MockObject
+     * @var MembershipManager|MockObject
      */
-    private $manager;
+    private MockObject $manager;
 
     /**
-     * @var LeadRepository|\PHPUnit_Framework_MockObject_MockObject
+     * @var CampaignMemberRepository|MockObject
      */
-    private $campaignMemberRepository;
+    private MockObject $campaignMemberRepository;
 
     /**
-     * @var \Mautic\LeadBundle\Entity\LeadRepository|\PHPUnit_Framework_MockObject_MockObject
+     * @var LeadRepository|MockObject
      */
-    private $leadRepository;
+    private MockObject $leadRepository;
 
     /**
-     * @var EventDispatcherInterface|\PHPUnit_Framework_MockObject_MockObject
+     * @var TranslatorInterface|MockObject
      */
-    private $eventDispatcher;
+    private MockObject $translator;
 
-    /**
-     * @var TranslatorInterface|\PHPUnit_Framework_MockObject_MockObject
-     */
-    private $translator;
+    private MembershipBuilder $membershipBuilder;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->manager                  = $this->createMock(MembershipManager::class);
-        $this->campaignMemberRepository = $this->createMock(LeadRepository::class);
-        $this->leadRepository           = $this->createMock(\Mautic\LeadBundle\Entity\LeadRepository::class);
-        $this->eventDispatcher          = $this->createMock(EventDispatcherInterface::class);
+        $this->campaignMemberRepository = $this->createMock(CampaignMemberRepository::class);
+        $this->leadRepository           = $this->createMock(LeadRepository::class);
         $this->translator               = $this->createMock(TranslatorInterface::class);
+        $this->membershipBuilder        = new MembershipBuilder(
+            $this->manager,
+            $this->campaignMemberRepository,
+            $this->leadRepository,
+            $this->translator
+        );
     }
 
-    public function testContactCountIsSkippedWhenOutputIsNull()
+    public function testContactCountIsSkippedWhenOutputIsNull(): void
     {
-        $builder = $this->getBuilder();
-
         $campaign       = new Campaign();
         $contactLimiter = new ContactLimiter(100);
 
@@ -78,13 +72,11 @@ class MembershipBuilderTest extends \PHPUnit_Framework_TestCase
             ->method('getOrphanedContacts')
             ->willReturn([]);
 
-        $builder->build($campaign, $contactLimiter, 1000);
+        $this->membershipBuilder->build($campaign, $contactLimiter, 1000);
     }
 
-    public function testContactsAreNotRemovedIfRunLimitReachedWhileAdding()
+    public function testContactsAreNotRemovedIfRunLimitReachedWhileAdding(): void
     {
-        $builder = $this->getBuilder();
-
         $campaign       = new Campaign();
         $contactLimiter = new ContactLimiter(100);
 
@@ -99,19 +91,52 @@ class MembershipBuilderTest extends \PHPUnit_Framework_TestCase
         $this->campaignMemberRepository->expects($this->never())
             ->method('getOrphanedContacts');
 
-        $builder->build($campaign, $contactLimiter, 2);
+        $this->membershipBuilder->build($campaign, $contactLimiter, 2);
     }
 
-    public function testWhileLoopBreaksWithNoMoreContacts()
+    public function testWhileLoopBreaksWithNoMoreContacts(): void
     {
-        $builder = $this->getBuilder();
+        $campaign = new class extends Campaign {
+            public function getId(): int
+            {
+                return 111;
+            }
+        };
 
-        $campaign       = new Campaign();
         $contactLimiter = new ContactLimiter(1);
+        $matcher        = $this->exactly(4);
 
-        $this->campaignMemberRepository->expects($this->exactly(4))
-            ->method('getCampaignContactsBySegments')
-            ->willReturnOnConsecutiveCalls([20], [21], [22], []);
+        $this->campaignMemberRepository->expects($matcher)
+            ->method('getCampaignContactsBySegments')->willReturnCallback(function (...$parameters) use ($matcher, $contactLimiter) {
+                if (1 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(111, $parameters[0]);
+                    $this->assertSame($contactLimiter, $parameters[1]);
+                    $this->assertFalse($parameters[2]);
+
+                    return [20];
+                }
+                if (2 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(111, $parameters[0]);
+                    $this->assertSame($contactLimiter, $parameters[1]);
+                    $this->assertFalse($parameters[2]);
+
+                    return [21];
+                }
+                if (3 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(111, $parameters[0]);
+                    $this->assertSame($contactLimiter, $parameters[1]);
+                    $this->assertFalse($parameters[2]);
+
+                    return [22];
+                }
+                if (4 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(111, $parameters[0]);
+                    $this->assertSame($contactLimiter, $parameters[1]);
+                    $this->assertFalse($parameters[2]);
+
+                    return [];
+                }
+            });
 
         $this->manager->expects($this->exactly(3))
             ->method('addContacts');
@@ -127,20 +152,69 @@ class MembershipBuilderTest extends \PHPUnit_Framework_TestCase
             ->method('getContactCollection')
             ->willReturn(new ArrayCollection([new Lead()]));
 
-        $builder->build($campaign, $contactLimiter, 100);
+        $this->membershipBuilder->build($campaign, $contactLimiter, 100);
     }
 
-    /**
-     * @return MembershipBuilder
-     */
-    private function getBuilder()
+    public function testWhileLoopBreaksWithNoMoreContactsForRepeatableCampaign(): void
     {
-        return new MembershipBuilder(
-            $this->manager,
-            $this->campaignMemberRepository,
-            $this->leadRepository,
-            $this->eventDispatcher,
-            $this->translator
-        );
+        $campaign = new class extends Campaign {
+            public function getId(): int
+            {
+                return 111;
+            }
+        };
+
+        $campaign->setAllowRestart(true);
+
+        $contactLimiter = new ContactLimiter(1);
+        $matcher        = $this->exactly(4);
+
+        $this->campaignMemberRepository->expects($matcher)
+            ->method('getCampaignContactsBySegments')->willReturnCallback(function (...$parameters) use ($matcher, $contactLimiter) {
+                if (1 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(111, $parameters[0]);
+                    $this->assertSame($contactLimiter, $parameters[1]);
+                    $this->assertTrue($parameters[2]);
+
+                    return [20];
+                }
+                if (2 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(111, $parameters[0]);
+                    $this->assertSame($contactLimiter, $parameters[1]);
+                    $this->assertTrue($parameters[2]);
+
+                    return [21];
+                }
+                if (3 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(111, $parameters[0]);
+                    $this->assertSame($contactLimiter, $parameters[1]);
+                    $this->assertTrue($parameters[2]);
+
+                    return [22];
+                }
+                if (4 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(111, $parameters[0]);
+                    $this->assertSame($contactLimiter, $parameters[1]);
+                    $this->assertTrue($parameters[2]);
+
+                    return [];
+                }
+            });
+
+        $this->manager->expects($this->exactly(3))
+            ->method('addContacts');
+
+        $this->campaignMemberRepository->expects($this->exactly(4))
+            ->method('getOrphanedContacts')
+            ->willReturnOnConsecutiveCalls([23], [24], [25], []);
+
+        $this->manager->expects($this->exactly(3))
+            ->method('removeContacts');
+
+        $this->leadRepository->expects($this->exactly(6))
+            ->method('getContactCollection')
+            ->willReturn(new ArrayCollection([new Lead()]));
+
+        $this->membershipBuilder->build($campaign, $contactLimiter, 100);
     }
 }

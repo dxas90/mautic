@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\EmailBundle\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
@@ -16,35 +7,13 @@ use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
 use Ramsey\Uuid\Uuid;
 
-/**
- * Class EmailReply.
- */
 class EmailReply
 {
-    /**
-     * @var string
-     */
-    private $id;
+    private string $id;
 
-    /**
-     * @var Stat
-     */
-    private $stat;
+    private \DateTimeInterface $dateReplied;
 
-    /**
-     * @var \DateTime
-     */
-    private $dateReplied;
-
-    /**
-     * @var string
-     */
-    private $messageId;
-
-    /**
-     * @param ORM\ClassMetadata $metadata
-     */
-    public static function loadMetadata(ORM\ClassMetadata $metadata)
+    public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
 
@@ -71,10 +40,8 @@ class EmailReply
 
     /**
      * Prepares the metadata for API usage.
-     *
-     * @param $metadata
      */
-    public static function loadApiMetadata(ApiMetadataDriver $metadata)
+    public static function loadApiMetadata(ApiMetadataDriver $metadata): void
     {
         $metadata->setGroupPrefix('emailReply')
             ->addProperties(
@@ -88,24 +55,18 @@ class EmailReply
     }
 
     /**
-     * EmailReply constructor.
-     *
-     * @param Stat           $stat
-     * @param                $messageId
-     * @param \DateTime|null $dateReplied
+     * @param string $messageId
      */
-    public function __construct(Stat $stat, $messageId, \DateTime $dateReplied = null)
-    {
+    public function __construct(
+        private Stat $stat,
+        private $messageId,
+        ?\DateTime $dateReplied = null,
+    ) {
         $this->id          = Uuid::uuid4()->toString();
-        $this->stat        = $stat;
-        $this->messageId   = $messageId;
-        $this->dateReplied = (null === $dateReplied) ? new \DateTime() : $dateReplied;
+        $this->dateReplied = $dateReplied ?? new \DateTime();
     }
 
-    /**
-     * @return int
-     */
-    public function getId()
+    public function getId(): string
     {
         return $this->id;
     }
@@ -119,7 +80,7 @@ class EmailReply
     }
 
     /**
-     * @return \DateTime
+     * @return \DateTimeInterface
      */
     public function getDateReplied()
     {

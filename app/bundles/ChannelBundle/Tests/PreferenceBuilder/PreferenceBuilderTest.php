@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ChannelBundle\Tests\PreferenceBuilder;
 
 use Doctrine\Common\Collections\ArrayCollection;
@@ -20,12 +11,11 @@ use Mautic\LeadBundle\Entity\DoNotContact;
 use Mautic\LeadBundle\Entity\Lead;
 use Psr\Log\NullLogger;
 
-class PreferenceBuilderTest extends \PHPUnit_Framework_TestCase
+class PreferenceBuilderTest extends \PHPUnit\Framework\TestCase
 {
-    public function testChannelsArePrioritized()
+    public function testChannelsArePrioritized(): void
     {
-        $lead = $this->getMockBuilder(Lead::class)
-            ->getMock();
+        $lead = $this->createMock(Lead::class);
         $lead->expects($this->once())
             ->method('getChannelRules')
             ->willReturn(
@@ -39,15 +29,13 @@ class PreferenceBuilderTest extends \PHPUnit_Framework_TestCase
                 ]
             );
 
-        $log = $this->getMockBuilder(LeadEventLog::class)
-            ->getMock();
+        $log = $this->createMock(LeadEventLog::class);
         $log->method('getLead')
             ->willReturn($lead);
         $log->method('getId')
             ->willReturn(1);
 
-        $lead2 = $this->getMockBuilder(Lead::class)
-            ->getMock();
+        $lead2 = $this->createMock(Lead::class);
         $lead2->expects($this->once())
             ->method('getChannelRules')
             ->willReturn(
@@ -61,8 +49,7 @@ class PreferenceBuilderTest extends \PHPUnit_Framework_TestCase
                 ]
             );
 
-        $log2 = $this->getMockBuilder(LeadEventLog::class)
-            ->getMock();
+        $log2 = $this->createMock(LeadEventLog::class);
         $log2->method('getLead')
             ->willReturn($lead2);
         $log2->method('getId')
@@ -111,10 +98,9 @@ class PreferenceBuilderTest extends \PHPUnit_Framework_TestCase
         $this->assertCount(0, $pushLogs);
     }
 
-    public function testLogIsRemovedFromAllChannels()
+    public function testLogIsRemovedFromAllChannels(): void
     {
-        $lead = $this->getMockBuilder(Lead::class)
-            ->getMock();
+        $lead = $this->createMock(Lead::class);
         $lead->expects($this->once())
             ->method('getChannelRules')
             ->willReturn(
@@ -128,8 +114,7 @@ class PreferenceBuilderTest extends \PHPUnit_Framework_TestCase
                 ]
             );
 
-        $log = $this->getMockBuilder(LeadEventLog::class)
-            ->getMock();
+        $log = $this->createMock(LeadEventLog::class);
         $log->method('getLead')
             ->willReturn($lead);
         $log->method('getId')

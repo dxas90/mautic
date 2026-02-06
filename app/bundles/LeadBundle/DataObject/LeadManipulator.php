@@ -1,59 +1,30 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\DataObject;
 
-/**
- * Class LeadManipulator.
- */
 class LeadManipulator
 {
     /**
-     * @var string|null
+     * If true then the manipulator was logged and should not be logged for the second time.
      */
-    private $bundleName;
+    private bool $logged = false;
 
     /**
-     * @var string|null
+     * @param ?string $bundleName
+     * @param ?string $objectName
+     * @param ?int    $objectId
+     * @param ?string $objectDescription
      */
-    private $objectName;
-
-    /**
-     * @var int|null
-     */
-    private $objectId;
-
-    /**
-     * @var string|null
-     */
-    private $objectDescription;
-
-    /**
-     * LeadManipulator constructor.
-     *
-     * @param null $bundleName
-     * @param null $objectName
-     * @param null $objectId
-     * @param null $objectDescription
-     */
-    public function __construct($bundleName = null, $objectName = null, $objectId = null, $objectDescription = null)
-    {
-        $this->bundleName        = $bundleName;
-        $this->objectName        = $objectName;
-        $this->objectId          = $objectId;
-        $this->objectDescription = $objectDescription;
+    public function __construct(
+        private $bundleName = null,
+        private $objectName = null,
+        private $objectId = null,
+        private $objectDescription = null,
+    ) {
     }
 
     /**
-     * @return string
+     * @return ?string
      */
     public function getBundleName()
     {
@@ -61,7 +32,7 @@ class LeadManipulator
     }
 
     /**
-     * @return string
+     * @return ?string
      */
     public function getObjectName()
     {
@@ -69,15 +40,59 @@ class LeadManipulator
     }
 
     /**
-     * @return int
+     * @return ?int
      */
     public function getObjectId()
     {
         return $this->objectId;
     }
 
+    /**
+     * @return ?string
+     */
     public function getObjectDescription()
     {
         return $this->objectDescription;
+    }
+
+    /**
+     * Check if the manipulator was logged already or not.
+     */
+    public function wasLogged(): bool
+    {
+        return $this->logged;
+    }
+
+    /**
+     * Set manipulator as logged so it wouldn't be logged for the second time in the same request.
+     */
+    public function setAsLogged(): void
+    {
+        $this->logged = true;
+    }
+
+    public function getManipulatedBy(): string
+    {
+        if ($this->objectDescription) {
+            return (string) $this->objectDescription;
+        }
+
+        return $this->getManipulatorKey();
+    }
+
+    public function getManipulatorKey(): string
+    {
+        $objectParts = [];
+        if ($this->bundleName) {
+            $objectParts[] = $this->bundleName;
+        }
+        if ($this->objectName) {
+            $objectParts[] = $this->objectName;
+        }
+        if ($this->objectId) {
+            $objectParts[] = $this->objectId;
+        }
+
+        return implode(':', $objectParts);
     }
 }

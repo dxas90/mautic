@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ConfigBundle\Mapper;
 
 use Mautic\ConfigBundle\Exception\BadFormConfigException;
@@ -19,34 +10,21 @@ use Mautic\CoreBundle\Helper\CoreParametersHelper;
 class ConfigMapper
 {
     /**
-     * @var CoreParametersHelper
+     * @var mixed[]
      */
-    private $parametersHelper;
+    private array $restrictedParameters;
 
-    /**
-     * @var array
-     */
-    private $restrictedParameters;
-
-    /**
-     * ConfigHelper constructor.
-     *
-     * @param CoreParametersHelper $parametersHelper
-     */
-    public function __construct(CoreParametersHelper $parametersHelper, array $restrictedParameters = [])
-    {
-        $this->parametersHelper     = $parametersHelper;
+    public function __construct(
+        private CoreParametersHelper $parametersHelper,
+        array $restrictedParameters = [],
+    ) {
         $this->restrictedParameters = RestrictionHelper::prepareRestrictions($restrictedParameters);
     }
 
     /**
-     * @param array $forms
-     *
-     * @return array
-     *
      * @throws BadFormConfigException
      */
-    public function bindFormConfigsWithRealValues(array $forms)
+    public function bindFormConfigsWithRealValues(array $forms): array
     {
         foreach ($forms as $bundle => $config) {
             if (!isset($config['parameters'])) {
@@ -61,18 +39,14 @@ class ConfigMapper
 
     /**
      * Merges default parameters from each subscribed bundle with the local (real) params.
-     *
-     * @param array $formParameters
-     *
-     * @return array
      */
-    private function mergeWithLocalParameters(array $formParameters)
+    private function mergeWithLocalParameters(array $formParameters): array
     {
         $formParameters = RestrictionHelper::applyRestrictions($formParameters, $this->restrictedParameters);
 
         // All config values are stored at root level of the config
         foreach ($formParameters as $formKey => $defaultValue) {
-            $configValue = $this->parametersHelper->getParameter($formKey);
+            $configValue = $this->parametersHelper->get($formKey);
 
             if (null === $configValue) {
                 // Nothing has been locally configured so keep default

@@ -1,53 +1,27 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
+declare(strict_types=1);
 
 namespace Mautic\EmailBundle\EventListener;
 
 use Mautic\CoreBundle\CoreEvents;
+use Mautic\CoreBundle\DTO\GlobalSearchFilterDTO;
 use Mautic\CoreBundle\Event as MauticEvents;
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
-use Mautic\CoreBundle\Helper\UserHelper;
+use Mautic\CoreBundle\Security\Permissions\CorePermissions;
+use Mautic\CoreBundle\Service\GlobalSearch;
 use Mautic\EmailBundle\Model\EmailModel;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
-/**
- * Class SearchSubscriber.
- */
-class SearchSubscriber extends CommonSubscriber
+class SearchSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var EmailModel
-     */
-    protected $emailModel;
-
-    /**
-     * @var UserHelper
-     */
-    protected $userHelper;
-
-    /**
-     * SearchSubscriber constructor.
-     *
-     * @param UserHelper $userHelper
-     * @param EmailModel $emailModel
-     */
-    public function __construct(UserHelper $userHelper, EmailModel $emailModel)
-    {
-        $this->userHelper = $userHelper;
-        $this->emailModel = $emailModel;
+    public function __construct(
+        private EmailModel $emailModel,
+        private CorePermissions $security,
+        private GlobalSearch $globalSearch,
+    ) {
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             CoreEvents::GLOBAL_SEARCH      => ['onGlobalSearch', 0],
@@ -55,65 +29,21 @@ class SearchSubscriber extends CommonSubscriber
         ];
     }
 
-    /**
-     * @param MauticEvents\GlobalSearchEvent $event
-     */
-    public function onGlobalSearch(MauticEvents\GlobalSearchEvent $event)
+    public function onGlobalSearch(MauticEvents\GlobalSearchEvent $event): void
     {
-        $str = $event->getSearchString();
-        if (empty($str)) {
-            return;
-        }
-
-        $filter      = ['string' => $str, 'force' => []];
-        $permissions = $this->security->isGranted(
-            ['email:emails:viewown', 'email:emails:viewother'],
-            'RETURN_ARRAY'
+        $filterDTO = new GlobalSearchFilterDTO($event->getSearchString());
+        $results   = $this->globalSearch->performSearch(
+            $filterDTO,
+            $this->emailModel,
+            '@MauticEmail/SubscribedEvents/Search/global.html.twig'
         );
-        if ($permissions['email:emails:viewown'] || $permissions['email:emails:viewother']) {
-            if (!$permissions['email:emails:viewother']) {
-                $filter['force'][] = [
-                    'column' => 'IDENTITY(e.createdBy)',
-                    'expr'   => 'eq',
-                    'value'  => $this->userHelper->getUser()->getId(),
-                ];
-            }
 
-            $emails = $this->emailModel->getEntities(
-                [
-                    'limit'  => 5,
-                    'filter' => $filter,
-                ]);
-
-            if (count($emails) > 0) {
-                $emailResults = [];
-
-                foreach ($emails as $email) {
-                    $emailResults[] = $this->templating->renderResponse(
-                        'MauticEmailBundle:SubscribedEvents\Search:global.html.php',
-                        ['email' => $email]
-                    )->getContent();
-                }
-                if (count($emails) > 5) {
-                    $emailResults[] = $this->templating->renderResponse(
-                        'MauticEmailBundle:SubscribedEvents\Search:global.html.php',
-                        [
-                            'showMore'     => true,
-                            'searchString' => $str,
-                            'remaining'    => (count($emails) - 5),
-                        ]
-                    )->getContent();
-                }
-                $emailResults['count'] = count($emails);
-                $event->addResults('mautic.email.emails', $emailResults);
-            }
+        if (!empty($results)) {
+            $event->addResults('mautic.email.emails', $results);
         }
     }
 
-    /**
-     * @param MauticEvents\CommandListEvent $event
-     */
-    public function onBuildCommandList(MauticEvents\CommandListEvent $event)
+    public function onBuildCommandList(MauticEvents\CommandListEvent $event): void
     {
         if ($this->security->isGranted(['email:emails:viewown', 'email:emails:viewother'], 'MATCH_ONE')) {
             $event->addCommands(

@@ -1,24 +1,17 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
 
-/**
- * Class ListLead.
- */
 class ListLead
 {
+    /**
+     * @var string
+     */
+    public const TABLE_NAME = 'lead_lists_leads';
+
     /**
      * @var LeadList
      **/
@@ -30,7 +23,7 @@ class ListLead
     private $lead;
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
     private $dateAdded;
 
@@ -44,15 +37,12 @@ class ListLead
      */
     private $manuallyAdded = false;
 
-    /**
-     * @param ORM\ClassMetadata $metadata
-     */
-    public static function loadMetadata(ORM\ClassMetadata $metadata)
+    public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
 
         $builder->setTable('lead_lists_leads')
-            ->setCustomRepositoryClass('Mautic\LeadBundle\Entity\ListLeadRepository');
+            ->setCustomRepositoryClass(ListLeadRepository::class);
 
         $builder->createManyToOne('list', 'LeadList')
             ->isPrimaryKey()
@@ -73,10 +63,11 @@ class ListLead
             ->build();
 
         $builder->addIndex(['manually_removed'], 'manually_removed');
+        $builder->addIndex(['lead_id', 'leadlist_id', 'manually_removed'], 'lead_id_lists_id_removed');
     }
 
     /**
-     * @return \DateTime
+     * @return \DateTimeInterface
      */
     public function getDateAdded()
     {
@@ -86,7 +77,7 @@ class ListLead
     /**
      * @param \DateTime $date
      */
-    public function setDateAdded($date)
+    public function setDateAdded($date): void
     {
         $this->dateAdded = $date;
     }
@@ -102,7 +93,7 @@ class ListLead
     /**
      * @param mixed $lead
      */
-    public function setLead($lead)
+    public function setLead($lead): void
     {
         $this->lead = $lead;
     }
@@ -118,7 +109,7 @@ class ListLead
     /**
      * @param LeadList $leadList
      */
-    public function setList($leadList)
+    public function setList($leadList): void
     {
         $this->list = $leadList;
     }
@@ -134,7 +125,7 @@ class ListLead
     /**
      * @param bool $manuallyRemoved
      */
-    public function setManuallyRemoved($manuallyRemoved)
+    public function setManuallyRemoved($manuallyRemoved): void
     {
         $this->manuallyRemoved = $manuallyRemoved;
     }
@@ -158,7 +149,7 @@ class ListLead
     /**
      * @param bool $manuallyAdded
      */
-    public function setManuallyAdded($manuallyAdded)
+    public function setManuallyAdded($manuallyAdded): void
     {
         $this->manuallyAdded = $manuallyAdded;
     }

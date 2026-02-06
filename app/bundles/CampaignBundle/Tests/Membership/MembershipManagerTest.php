@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Tests\Membership;
 
 use Doctrine\Common\Collections\ArrayCollection;
@@ -22,34 +13,31 @@ use Mautic\CampaignBundle\Membership\MembershipManager;
 use Mautic\LeadBundle\Entity\Lead;
 use Psr\Log\NullLogger;
 
-class MembershipManagerTest extends \PHPUnit_Framework_TestCase
+class MembershipManagerTest extends \PHPUnit\Framework\TestCase
 {
     /**
-     * @var Adder|\PHPUnit_Framework_MockObject_MockObject
+     * @var Adder|\PHPUnit\Framework\MockObject\MockObject
      */
-    private $adder;
+    private \PHPUnit\Framework\MockObject\MockObject $adder;
 
     /**
-     * @var Remover|\PHPUnit_Framework_MockObject_MockObject
+     * @var Remover|\PHPUnit\Framework\MockObject\MockObject
      */
-    private $remover;
+    private \PHPUnit\Framework\MockObject\MockObject $remover;
 
     /**
-     * @var EventDispatcher|\PHPUnit_Framework_MockObject_MockObject
+     * @var EventDispatcher|\PHPUnit\Framework\MockObject\MockObject
      */
-    private $eventDispatcher;
+    private \PHPUnit\Framework\MockObject\MockObject $eventDispatcher;
 
     /**
-     * @var LeadRepository|\PHPUnit_Framework_MockObject_MockObject
+     * @var LeadRepository|\PHPUnit\Framework\MockObject\MockObject
      */
-    private $leadRepository;
+    private \PHPUnit\Framework\MockObject\MockObject $leadRepository;
 
-    /**
-     * @var NullLogger|\PHPUnit_Framework_MockObject_MockObject
-     */
-    private $logger;
+    private NullLogger $logger;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->adder           = $this->createMock(Adder::class);
         $this->remover         = $this->createMock(Remover::class);
@@ -58,7 +46,7 @@ class MembershipManagerTest extends \PHPUnit_Framework_TestCase
         $this->logger          = new NullLogger();
     }
 
-    public function testMembershipCreatedIfNotFound()
+    public function testMembershipCreatedIfNotFound(): void
     {
         $contact  = new Lead();
         $campaign = new Campaign();
@@ -76,7 +64,7 @@ class MembershipManagerTest extends \PHPUnit_Framework_TestCase
         $this->getManager()->addContact($contact, $campaign);
     }
 
-    public function testMembershipUpdatedIfFound()
+    public function testMembershipUpdatedIfFound(): void
     {
         $contact        = new Lead();
         $campaign       = new Campaign();
@@ -97,7 +85,7 @@ class MembershipManagerTest extends \PHPUnit_Framework_TestCase
         $this->getManager()->addContact($contact, $campaign);
     }
 
-    public function testMembershipIsUpdatedWhenRemoved()
+    public function testMembershipIsUpdatedWhenRemoved(): void
     {
         $contact        = new Lead();
         $campaign       = new Campaign();
@@ -118,7 +106,7 @@ class MembershipManagerTest extends \PHPUnit_Framework_TestCase
         $this->getManager()->removeContact($contact, $campaign);
     }
 
-    public function testContactsAreAddedOrUpdated()
+    public function testContactsAreAddedOrUpdated(): void
     {
         $contact = $this->createMock(Lead::class);
         $contact->method('getId')
@@ -152,7 +140,7 @@ class MembershipManagerTest extends \PHPUnit_Framework_TestCase
         $this->getManager()->addContacts(new ArrayCollection([1 => $contact, 2 => $contact2]), $campaign);
     }
 
-    public function testContactsAreRemoved()
+    public function testContactsAreRemoved(): void
     {
         $contact = $this->createMock(Lead::class);
         $contact->method('getId')

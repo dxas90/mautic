@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ReportBundle\Scheduler\Date;
 
 use Mautic\ReportBundle\Scheduler\Builder\SchedulerBuilder;
@@ -20,14 +11,9 @@ use Mautic\ReportBundle\Scheduler\SchedulerInterface;
 
 class DateBuilder
 {
-    /**
-     * @var SchedulerBuilder
-     */
-    private $schedulerBuilder;
-
-    public function __construct(SchedulerBuilder $schedulerBuilder)
-    {
-        $this->schedulerBuilder = $schedulerBuilder;
+    public function __construct(
+        private SchedulerBuilder $schedulerBuilder,
+    ) {
     }
 
     /**
@@ -35,18 +21,15 @@ class DateBuilder
      * @param string $scheduleUnit
      * @param string $scheduleDay
      * @param string $scheduleMonthFrequency
-     *
-     * @return array
      */
-    public function getPreviewDays($isScheduled, $scheduleUnit, $scheduleDay, $scheduleMonthFrequency)
+    public function getPreviewDays($isScheduled, $scheduleUnit, $scheduleDay, $scheduleMonthFrequency): array
     {
         $entity = new SchedulerEntity($isScheduled, $scheduleUnit, $scheduleDay, $scheduleMonthFrequency);
+        $count  = $entity->isScheduledNow() ? 1 : 10;
 
         try {
-            $recurrences = $this->schedulerBuilder->getNextEvents($entity, 10);
-        } catch (InvalidSchedulerException $e) {
-            return [];
-        } catch (NotSupportedScheduleTypeException $e) {
+            $recurrences = $this->schedulerBuilder->getNextEvents($entity, $count);
+        } catch (InvalidSchedulerException|NotSupportedScheduleTypeException) {
             return [];
         }
 
@@ -59,8 +42,6 @@ class DateBuilder
     }
 
     /**
-     * @param SchedulerInterface $scheduler
-     *
      * @return \DateTimeInterface
      *
      * @throws NoScheduleException
@@ -69,9 +50,7 @@ class DateBuilder
     {
         try {
             $recurrences = $this->schedulerBuilder->getNextEvent($scheduler);
-        } catch (InvalidSchedulerException $e) {
-            throw new NoScheduleException();
-        } catch (NotSupportedScheduleTypeException $e) {
+        } catch (InvalidSchedulerException|NotSupportedScheduleTypeException) {
             throw new NoScheduleException();
         }
 

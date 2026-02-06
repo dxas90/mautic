@@ -1,66 +1,57 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
+declare(strict_types=1);
 
 namespace Mautic\LeadBundle\Form\DataTransformer;
 
 use Mautic\CoreBundle\Helper\DateTimeHelper;
 use Mautic\LeadBundle\Entity\LeadListRepository;
 use Symfony\Component\Form\DataTransformerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
+/**
+ * @implements DataTransformerInterface<mixed, array<mixed>|mixed>
+ */
 class FieldFilterTransformer implements DataTransformerInterface
 {
-    private $relativeDateStrings;
-
     /**
-     * @var array
+     * @var string[]
      */
-    private $default;
+    private array $relativeDateStrings;
 
-    /**
-     * @param       $translator
-     * @param array $default
-     */
-    public function __construct($translator, $default = [])
-    {
+    public function __construct(
+        TranslatorInterface $translator,
+        private array $default = [],
+    ) {
         $this->relativeDateStrings = LeadListRepository::getRelativeDateTranslationKeys();
         foreach ($this->relativeDateStrings as &$string) {
             $string = $translator->trans($string);
         }
-        $this->default = $default;
     }
 
     /**
      * From DB format to form format.
-     *
-     * @param mixed $rawFilters
-     *
-     * @return array|mixed
      */
-    public function transform($rawFilters)
+    public function transform(mixed $rawFilters): mixed
     {
         if (!is_array($rawFilters)) {
             return [];
         }
 
-        foreach ($rawFilters as $k => $f) {
+        foreach ($rawFilters as $key => $filter) {
             if (!empty($this->default)) {
-                $rawFilters[$k] = array_merge($this->default, $rawFilters[$k]);
+                $rawFilters[$key] = array_merge($this->default, $rawFilters[$key]);
             }
-            if ($f['type'] == 'datetime') {
-                if (in_array($f['filter'], $this->relativeDateStrings) or stristr($f['filter'][0], '-') or stristr($f['filter'][0], '+')) {
+            if ('datetime' === $filter['type']) {
+                $bcFilter = $filter['filter'] ?? '';
+                $filter   = $filter['properties']['filter'] ?? $bcFilter;
+                if (empty($filter) || in_array($filter, $this->relativeDateStrings) || stristr($filter[0], '-') || stristr($filter[0], '+')) {
                     continue;
                 }
 
-                $dt                       = new DateTimeHelper($f['filter'], 'Y-m-d H:i');
-                $rawFilters[$k]['filter'] = $dt->toLocalString();
+                $dt = new DateTimeHelper($filter, 'Y-m-d H:i');
+
+                $rawFilters[$key]['properties']['filter'] = $dt->toLocalString();
             }
         }
 
@@ -69,12 +60,8 @@ class FieldFilterTransformer implements DataTransformerInterface
 
     /**
      * Form format to database format.
-     *
-     * @param mixed $rawFilters
-     *
-     * @return array|mixed
      */
-    public function reverseTransform($rawFilters)
+    public function reverseTransform(mixed $rawFilters): mixed
     {
         if (!is_array($rawFilters)) {
             return [];
@@ -83,13 +70,16 @@ class FieldFilterTransformer implements DataTransformerInterface
         $rawFilters = array_values($rawFilters);
 
         foreach ($rawFilters as $k => $f) {
-            if ($f['type'] == 'datetime') {
-                if (in_array($f['filter'], $this->relativeDateStrings) or stristr($f['filter'][0], '-') or stristr($f['filter'][0], '+')) {
+            if ('datetime' === $f['type']) {
+                $bcFilter = $f['filter'] ?? '';
+                $filter   = $f['properties']['filter'] ?? $bcFilter;
+                if (empty($filter) || in_array($filter, $this->relativeDateStrings) || stristr($filter[0], '-') || stristr($filter[0], '+')) {
                     continue;
                 }
 
-                $dt                       = new DateTimeHelper($f['filter'], 'Y-m-d H:i', 'local');
-                $rawFilters[$k]['filter'] = $dt->toUtcString();
+                $dt = new DateTimeHelper($filter, 'Y-m-d H:i', 'local');
+
+                $rawFilters[$k]['properties']['filter'] = $dt->toUtcString();
             }
         }
 

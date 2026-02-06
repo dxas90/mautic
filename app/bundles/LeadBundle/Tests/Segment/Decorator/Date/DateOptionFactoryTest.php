@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Tests\Segment\Decorator\Date;
 
 use Mautic\LeadBundle\Segment\ContactSegmentFilterCrate;
@@ -32,12 +23,10 @@ use Mautic\LeadBundle\Segment\Decorator\Date\Year\DateYearThis;
 use Mautic\LeadBundle\Segment\Decorator\DateDecorator;
 use Mautic\LeadBundle\Segment\RelativeDate;
 
-class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
+#[\PHPUnit\Framework\Attributes\CoversClass(DateOptionFactory::class)]
+class DateOptionFactoryTest extends \PHPUnit\Framework\TestCase
 {
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testBirthday()
+    public function testBirthday(): void
     {
         $filterName = 'birthday';
 
@@ -45,17 +34,14 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
 
         $this->assertInstanceOf(DateAnniversary::class, $filterDecorator);
 
-        $filterName = 'birthday';
+        $filterName = 'anniversary';
 
         $filterDecorator = $this->getFilterDecorator($filterName);
 
         $this->assertInstanceOf(DateAnniversary::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testDayToday()
+    public function testDayToday(): void
     {
         $filterName = 'today';
 
@@ -64,10 +50,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateDayToday::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testDayTomorrow()
+    public function testDayTomorrow(): void
     {
         $filterName = 'tomorrow';
 
@@ -76,10 +59,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateDayTomorrow::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testDayYesterday()
+    public function testDayYesterday(): void
     {
         $filterName = 'yesterday';
 
@@ -88,10 +68,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateDayYesterday::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testWeekLast()
+    public function testWeekLast(): void
     {
         $filterName = 'last week';
 
@@ -100,10 +77,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateWeekLast::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testWeekNext()
+    public function testWeekNext(): void
     {
         $filterName = 'next week';
 
@@ -112,10 +86,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateWeekNext::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testWeekThis()
+    public function testWeekThis(): void
     {
         $filterName = 'this week';
 
@@ -124,10 +95,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateWeekThis::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testMonthLast()
+    public function testMonthLast(): void
     {
         $filterName = 'last month';
 
@@ -136,10 +104,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateMonthLast::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testMonthNext()
+    public function testMonthNext(): void
     {
         $filterName = 'next month';
 
@@ -148,10 +113,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateMonthNext::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testMonthThis()
+    public function testMonthThis(): void
     {
         $filterName = 'this month';
 
@@ -160,10 +122,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateMonthThis::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testYearLast()
+    public function testYearLast(): void
     {
         $filterName = 'last year';
 
@@ -172,10 +131,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateYearLast::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testYearNext()
+    public function testYearNext(): void
     {
         $filterName = 'next year';
 
@@ -184,10 +140,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateYearNext::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testYearThis()
+    public function testYearThis(): void
     {
         $filterName = 'this year';
 
@@ -196,10 +149,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateYearThis::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testRelativePlus()
+    public function testRelativePlus(): void
     {
         $filterName = '+20 days';
 
@@ -208,10 +158,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateRelativeInterval::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testRelativeMinus()
+    public function testRelativeMinus(): void
     {
         $filterName = '+20 days';
 
@@ -220,10 +167,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateRelativeInterval::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testRelativeAgo()
+    public function testRelativeAgo(): void
     {
         $filterName = '20 days ago';
 
@@ -232,10 +176,46 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateRelativeInterval::class, $filterDecorator);
     }
 
+    public function testRelativeFirstDayOf(): void
+    {
+        $filterName = 'first day of previous month';
+
+        $filterDecorator = $this->getFilterDecorator($filterName);
+
+        $this->assertInstanceOf(DateRelativeInterval::class, $filterDecorator);
+    }
+
+    public function testRelativeLastDayOf(): void
+    {
+        $filterName = 'last day of previous month';
+
+        $filterDecorator = $this->getFilterDecorator($filterName);
+
+        $this->assertInstanceOf(DateRelativeInterval::class, $filterDecorator);
+    }
+
     /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
+     * @return string[][]
      */
-    public function testDateDefault()
+    public static function getRelativeDateNotations(): array
+    {
+        return [
+            [DateRelativeInterval::class, 'first day of January 2021'],
+            [DateRelativeInterval::class, 'last day of January 2021'],
+            [DateRelativeInterval::class, '5 days ago'],
+            [DateDefault::class, 'day of January 2021'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('getRelativeDateNotations')]
+    public function testRelativeDateNotations(string $expectedResult, string $filterName): void
+    {
+        $filterDecorator = $this->getFilterDecorator($filterName);
+
+        $this->assertInstanceOf($expectedResult, $filterDecorator);
+    }
+
+    public function testDateDefault(): void
     {
         $filterName = '2018-01-01';
 
@@ -244,10 +224,7 @@ class DateOptionFactoryTest extends \PHPUnit_Framework_TestCase
         $this->assertInstanceOf(DateDefault::class, $filterDecorator);
     }
 
-    /**
-     * @covers \Mautic\LeadBundle\Segment\Decorator\Date\DateOptionFactory::getDateOption
-     */
-    public function testNullValue()
+    public function testNullValue(): void
     {
         $filterName = null;
 

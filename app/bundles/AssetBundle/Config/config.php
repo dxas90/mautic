@@ -1,28 +1,19 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 return [
     'routes' => [
         'main' => [
             'mautic_asset_index' => [
                 'path'       => '/assets/{page}',
-                'controller' => 'MauticAssetBundle:Asset:index',
+                'controller' => 'Mautic\AssetBundle\Controller\AssetController::indexAction',
             ],
             'mautic_asset_remote' => [
                 'path'       => '/assets/remote',
-                'controller' => 'MauticAssetBundle:Asset:remote',
+                'controller' => 'Mautic\AssetBundle\Controller\AssetController::remoteAction',
             ],
             'mautic_asset_action' => [
                 'path'       => '/assets/{objectAction}/{objectId}',
-                'controller' => 'MauticAssetBundle:Asset:execute',
+                'controller' => 'Mautic\AssetBundle\Controller\AssetController::executeAction',
             ],
         ],
         'api' => [
@@ -30,13 +21,13 @@ return [
                 'standard_entity' => true,
                 'name'            => 'assets',
                 'path'            => '/assets',
-                'controller'      => 'MauticAssetBundle:Api\AssetApi',
+                'controller'      => Mautic\AssetBundle\Controller\Api\AssetApiController::class,
             ],
         ],
         'public' => [
             'mautic_asset_download' => [
                 'path'       => '/asset/{slug}',
-                'controller' => 'MauticAssetBundle:Public:download',
+                'controller' => 'Mautic\AssetBundle\Controller\PublicController::downloadAction',
                 'defaults'   => [
                     'slug' => '',
                 ],
@@ -58,157 +49,66 @@ return [
     ],
 
     'categories' => [
-        'asset' => null,
+        'asset' => [
+            'class' => Mautic\AssetBundle\Entity\Asset::class,
+        ],
     ],
 
     'services' => [
-        'events' => [
-            'mautic.asset.subscriber' => [
-                'class'     => 'Mautic\AssetBundle\EventListener\AssetSubscriber',
-                'arguments' => [
-                    'mautic.helper.ip_lookup',
-                    'mautic.core.model.auditlog',
-                ],
-            ],
-            'mautic.asset.pointbundle.subscriber' => [
-                'class'     => 'Mautic\AssetBundle\EventListener\PointSubscriber',
-                'arguments' => [
-                    'mautic.point.model.point',
-                ],
-            ],
-            'mautic.asset.formbundle.subscriber' => [
-                'class' => 'Mautic\AssetBundle\EventListener\FormSubscriber',
-            ],
-            'mautic.asset.campaignbundle.subscriber' => [
-                'class'     => 'Mautic\AssetBundle\EventListener\CampaignSubscriber',
-                'arguments' => [
-                    'mautic.campaign.model.event',
-                ],
-            ],
-            'mautic.asset.reportbundle.subscriber' => [
-                'class'     => \Mautic\AssetBundle\EventListener\ReportSubscriber::class,
-                'arguments' => [
-                    'mautic.lead.model.company_report_data',
-                ],
-            ],
-            'mautic.asset.builder.subscriber' => [
-                'class'     => 'Mautic\AssetBundle\EventListener\BuilderSubscriber',
-                'arguments' => [
-                    'mautic.asset.helper.token',
-                    'mautic.lead.model.lead',
-                ],
-            ],
-            'mautic.asset.leadbundle.subscriber' => [
-                'class'     => 'Mautic\AssetBundle\EventListener\LeadSubscriber',
-                'arguments' => [
-                    'mautic.asset.model.asset',
-                ],
-            ],
-            'mautic.asset.pagebundle.subscriber' => [
-                'class' => 'Mautic\AssetBundle\EventListener\PageSubscriber',
-            ],
-            'mautic.asset.emailbundle.subscriber' => [
-                'class' => 'Mautic\AssetBundle\EventListener\EmailSubscriber',
-            ],
-            'mautic.asset.configbundle.subscriber' => [
-                'class' => 'Mautic\AssetBundle\EventListener\ConfigSubscriber',
-            ],
-            'mautic.asset.search.subscriber' => [
-                'class'     => 'Mautic\AssetBundle\EventListener\SearchSubscriber',
-                'arguments' => [
-                    'mautic.asset.model.asset',
-                ],
-            ],
-            'mautic.asset.stats.subscriber' => [
-                'class'     => \Mautic\AssetBundle\EventListener\StatsSubscriber::class,
-                'arguments' => [
-                    'doctrine.orm.entity_manager',
-                ],
-            ],
-            'oneup_uploader.pre_upload' => [
-                'class'     => \Mautic\AssetBundle\EventListener\UploadSubscriber::class,
+        'permissions' => [
+            'mautic.asset.permissions' => [
+                'class'     => Mautic\AssetBundle\Security\Permissions\AssetPermissions::class,
                 'arguments' => [
                     'mautic.helper.core_parameters',
-                    'mautic.asset.model.asset',
-                    'mautic.core.validator.file_upload',
                 ],
-            ],
-            'mautic.asset.dashboard.subscriber' => [
-                'class'     => 'Mautic\AssetBundle\EventListener\DashboardSubscriber',
-                'arguments' => [
-                    'mautic.asset.model.asset',
-                ],
-            ],
-        ],
-        'forms' => [
-            'mautic.form.type.asset' => [
-                'class'     => 'Mautic\AssetBundle\Form\Type\AssetType',
-                'arguments' => [
-                    'translator',
-                    'mautic.helper.theme',
-                    'mautic.asset.model.asset',
-                ],
-                'alias' => 'asset',
-            ],
-            'mautic.form.type.pointaction_assetdownload' => [
-                'class' => 'Mautic\AssetBundle\Form\Type\PointActionAssetDownloadType',
-                'alias' => 'pointaction_assetdownload',
-            ],
-            'mautic.form.type.campaignevent_assetdownload' => [
-                'class' => 'Mautic\AssetBundle\Form\Type\CampaignEventAssetDownloadType',
-                'alias' => 'campaignevent_assetdownload',
-            ],
-            'mautic.form.type.formsubmit_assetdownload' => [
-                'class' => 'Mautic\AssetBundle\Form\Type\FormSubmitActionDownloadFileType',
-                'alias' => 'asset_submitaction_downloadfile',
-            ],
-            'mautic.form.type.assetlist' => [
-                'class'     => 'Mautic\AssetBundle\Form\Type\AssetListType',
-                'arguments' => 'mautic.factory',
-                'alias'     => 'asset_list',
-            ],
-            'mautic.form.type.assetconfig' => [
-                'class'     => 'Mautic\AssetBundle\Form\Type\ConfigType',
-                'arguments' => 'mautic.factory',
-                'alias'     => 'assetconfig',
-            ],
-            'mautic.form.type.asset_dashboard_downloads_in_time_widget' => [
-                'class' => 'Mautic\AssetBundle\Form\Type\DashboardDownloadsInTimeWidgetType',
-                'alias' => 'asset_dashboard_downloads_in_time_widget',
             ],
         ],
         'others' => [
             'mautic.asset.upload.error.handler' => [
-                'class'     => 'Mautic\AssetBundle\ErrorHandler\DropzoneErrorHandler',
-                'arguments' => 'mautic.factory',
+                'class'     => Mautic\AssetBundle\ErrorHandler\DropzoneErrorHandler::class,
             ],
             // Override the DropzoneController
-            'oneup_uploader.controller.dropzone.class' => 'Mautic\AssetBundle\Controller\UploadController',
-            'mautic.asset.helper.token'                => [
-                'class'     => 'Mautic\AssetBundle\Helper\TokenHelper',
-                'arguments' => 'mautic.asset.model.asset',
+            'oneup_uploader.controller.dropzone.class' => [
+                'class'     => Mautic\AssetBundle\Controller\UploadController::class,
             ],
         ],
-        'models' => [
-            'mautic.asset.model.asset' => [
-                'class'     => \Mautic\AssetBundle\Model\AssetModel::class,
-                'arguments' => [
-                    'mautic.lead.model.lead',
-                    'mautic.category.model.category',
-                    'request_stack',
-                    'mautic.helper.ip_lookup',
-                    'mautic.helper.core_parameters',
-                    'mautic.lead.service.device_creator_service',
-                    'mautic.lead.factory.device_detector_factory',
-                    'mautic.lead.service.device_tracking_service',
-                ],
+        'fixtures' => [
+            'mautic.asset.fixture.asset' => [
+                'class'     => Mautic\AssetBundle\DataFixtures\ORM\LoadAssetData::class,
+                'tag'       => Doctrine\Bundle\FixturesBundle\DependencyInjection\CompilerPass\FixturesCompilerPass::FIXTURE_TAG,
             ],
         ],
     ],
 
     'parameters' => [
-        'upload_dir'         => '%kernel.root_dir%/../media/files',
-        'max_size'           => '6',
-        'allowed_extensions' => ['csv', 'doc', 'docx', 'epub', 'gif', 'jpg', 'jpeg', 'mpg', 'mpeg', 'mp3', 'odt', 'odp', 'ods', 'pdf', 'png', 'ppt', 'pptx', 'tif', 'tiff', 'txt', 'xls', 'xlsx', 'wav'],
+        'upload_dir'          => '%mautic.application_dir%/media/files',
+        'max_size'            => '6',
+        'allowed_extensions'  => ['csv', 'doc', 'docx', 'epub', 'gif', 'jpg', 'jpeg', 'mpg', 'mpeg', 'mp3', 'odt', 'odp', 'ods', 'pdf', 'png', 'ppt', 'pptx', 'tif', 'tiff', 'txt', 'xls', 'xlsx', 'wav'],
+        'streamed_extensions' => ['gif', 'jpg', 'jpeg', 'mpg', 'mpeg', 'mp3', 'pdf', 'png', 'wav'],
+        'allowed_mimetypes'   => [
+            'csv'  => 'text/csv',
+            'doc'  => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'epub' => 'application/epub+zip',
+            'gif'  => 'image/gif',
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'mpg'  => 'video/mpeg',
+            'mpeg' => 'video/mpeg',
+            'mp3'  => 'audio/mpeg',
+            'odt'  => 'application/vnd.oasis.opendocument.text',
+            'odp'  => 'application/vnd.oasis.opendocument.presentation',
+            'ods'  => 'application/vnd.oasis.opendocument.spreadsheet',
+            'pdf'  => 'application/pdf',
+            'png'  => 'image/png',
+            'ppt'  => 'application/vnd.ms-powerpoint',
+            'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'tif'  => 'image/tiff',
+            'tiff' => 'image/tiff',
+            'txt'  => 'text/plain',
+            'xls'  => 'application/vnd.ms-excel',
+            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'wav'  => 'audio/wav',
+        ],
     ],
 ];

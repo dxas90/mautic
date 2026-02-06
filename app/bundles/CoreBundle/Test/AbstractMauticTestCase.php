@@ -2,208 +2,209 @@
 
 namespace Mautic\CoreBundle\Test;
 
-use Doctrine\Common\DataFixtures\Executor\ORMExecutor;
-use Doctrine\Common\DataFixtures\Purger\ORMPurger;
+use Doctrine\Common\DataFixtures\Executor\AbstractExecutor;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManager;
-use Mautic\CoreBundle\Helper\CookieHelper;
-use Mautic\CoreBundle\Test\Session\FixedMockFileSessionStorage;
-use Symfony\Bridge\Doctrine\DataFixtures\ContainerAwareLoader;
-use Symfony\Bundle\FrameworkBundle\Client;
-use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
+use Doctrine\ORM\EntityManagerInterface;
+use Liip\TestFixturesBundle\Services\DatabaseToolCollection;
+use Liip\TestFixturesBundle\Services\DatabaseTools\AbstractDatabaseTool;
+use Mautic\EmailBundle\Mailer\Message\MauticMessage;
+use Mautic\UserBundle\Entity\User;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\ArgvInput;
-use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
-use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\Finder\Finder;
-use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\Console\Tester\CommandTester;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Mime\Message;
+use Symfony\Component\Mime\RawMessage;
+use Symfony\Component\Routing\Router;
 
 abstract class AbstractMauticTestCase extends WebTestCase
 {
-    /**
-     * @var EntityManager
-     */
-    protected $em;
+    protected EntityManager $em;
+
+    protected Connection $connection;
+
+    protected KernelBrowser $client;
+
+    protected Router $router;
+
+    protected array $clientOptions = [];
 
     /**
-     * @var ContainerInterface
+     * Credentials for API authentication.
+     *
+     * @var array<string,string>
      */
-    protected $container;
-
-    /**
-     * @var Client
-     */
-    protected $client;
-
-    /**
-     * @var array
-     */
-    protected $clientServer = [
+    protected array $clientServer = [
         'PHP_AUTH_USER' => 'admin',
-        'PHP_AUTH_PW'   => 'mautic',
+        'PHP_AUTH_PW'   => 'Maut1cR0cks!',
     ];
 
-    public function setUp()
-    {
-        \Mautic\CoreBundle\ErrorHandler\ErrorHandler::register('prod');
+    protected array $configParams = [
+        'api_enabled'                       => true,
+        'api_enable_basic_auth'             => true,
+        'create_custom_field_in_background' => false,
+        'site_url'                          => 'https://localhost',
+        'mailer_dsn'                        => 'null://null',
+        'messenger_dsn_email'               => 'in-memory://default',
+        'messenger_dsn_hit'                 => 'sync://',
+        'messenger_dsn_failed'              => 'in-memory://default',
+    ];
 
-        $this->client = static::createClient([], $this->clientServer);
+    protected bool $authenticateApi = false;
+
+    protected AbstractDatabaseTool $databaseTool;
+
+    /**
+     * Overloading the method from MailerAssertionsTrait to get better typehint.
+     */
+    public static function getMailerMessage(int $index = 0, ?string $transport = null): RawMessage|MauticMessage|null
+    {
+        return self::getMailerMessages($transport)[$index] ?? null;
+    }
+
+    /**
+     * @return RawMessage[]
+     */
+    public static function getMailerMessagesByToAddress(string $toAddress, ?string $transport = null): array
+    {
+        return array_values(
+            array_filter(
+                self::getMailerMessages($transport),
+                function (RawMessage $message) use ($toAddress): bool {
+                    // Messages are actually Message objects (which extend RawMessage) and have getHeaders()
+                    if ($message instanceof Message) {
+                        return $toAddress === $message->getHeaders()->get('To')->getBodyAsString();
+                    }
+
+                    return false;
+                }
+            )
+        );
+    }
+
+    protected function setUp(): void
+    {
+        $this->setUpSymfony($this->configParams);
+        $this->databaseTool = static::getContainer()->get(DatabaseToolCollection::class)->get();
+    }
+
+    protected function setUpSymfony(array $defaultConfigOptions = []): void
+    {
+        putenv('MAUTIC_CONFIG_PARAMETERS='.json_encode($defaultConfigOptions));
+        EnvLoader::load();
+
+        self::ensureKernelShutdown();
+        $this->client = static::createClient($this->clientOptions, $this->authenticateApi ? $this->clientServer : []);
         $this->client->disableReboot();
         $this->client->followRedirects(true);
 
-        $this->container = $this->client->getContainer();
-        $this->em        = $this->container->get('doctrine')->getManager();
+        $this->em = static::getContainer()->get('doctrine')->getManager();
+        \assert($this->em instanceof EntityManagerInterface);
+        $this->connection = $this->em->getConnection();
+        $this->router     = static::getContainer()->get('router');
+        $scheme           = $this->router->getContext()->getScheme();
+        $secure           = 0 === strcasecmp($scheme, 'https');
 
-        $this->mockServices();
+        $this->client->setServerParameter('HTTPS', (string) $secure);
     }
 
-    protected function tearDown()
+    public function loginUser(User $user): void
     {
-        static::$class = null;
+        $this->client->loginUser($user, 'mautic');
+    }
 
-        $this->em->close();
-
-        parent::tearDown();
+    protected function logoutUser(): void
+    {
+        $this->client->request(Request::METHOD_GET, '/s/logout');
+        $this->client->getCookieJar()->clear();
     }
 
     /**
-     * {@inheritdoc}
+     * Make `$append = true` default so we can avoid unnecessary purges.
      */
-    protected static function getKernelClass()
+    protected function loadFixtures(array $classNames = [], bool $append = true): ?AbstractExecutor
     {
-        if (isset($_SERVER['KERNEL_DIR'])) {
-            $dir = $_SERVER['KERNEL_DIR'];
-
-            if (!is_dir($dir)) {
-                $phpUnitDir = static::getPhpUnitXmlDir();
-                if (is_dir("$phpUnitDir/$dir")) {
-                    $dir = "$phpUnitDir/$dir";
-                }
-            }
-        } else {
-            $dir = static::getPhpUnitXmlDir();
-        }
-
-        $finder = new Finder();
-        $finder->name('*TestKernel.php')->depth(0)->in($dir);
-        $results = iterator_to_array($finder);
-        if (!count($results)) {
-            throw new \RuntimeException('Either set KERNEL_DIR in your phpunit.xml according to https://symfony.com/doc/current/book/testing.html#your-first-functional-test or override the WebTestCase::createKernel() method.');
-        }
-
-        $file  = current($results);
-        $class = $file->getBasename('.php');
-
-        require_once $file;
-
-        return $class;
+        return $this->databaseTool->loadFixtures($classNames, $append);
     }
 
-    private function mockServices()
+    /**
+     * Make `$append = true` default so we can avoid unnecessary purges.
+     */
+    protected function loadFixtureFiles(array $paths = [], bool $append = true): array
     {
-        $cookieHelper = $this->getMockBuilder(CookieHelper::class)
-            ->disableOriginalConstructor()
-            ->setMethods(['setCookie', 'setCharset'])
-            ->getMock();
-
-        $cookieHelper->expects($this->any())
-            ->method('setCookie');
-
-        $this->container->set('mautic.helper.cookie', $cookieHelper);
-
-        $this->container->set('session', new Session(new FixedMockFileSessionStorage()));
+        return $this->databaseTool->loadAliceFixture($paths, $append);
     }
 
-    protected function applyMigrations()
+    protected function applyMigrations(): void
     {
         $input  = new ArgvInput(['console', 'doctrine:migrations:version', '--add', '--all', '--no-interaction']);
         $output = new BufferedOutput();
 
-        $application = new Application($this->container->get('kernel'));
+        $application = new Application(static::getContainer()->get('kernel'));
         $application->setAutoExit(false);
         $application->run($input, $output);
     }
 
-    /**
-     * @param array|null $paths
-     */
-    protected function installDatabaseFixtures(array $paths = null)
+    protected function installDatabaseFixtures(array $classNames = []): void
     {
-        if (null === $paths) {
-            $paths = [
-                dirname(__DIR__).'/../InstallBundle/InstallFixtures/ORM',
-                // Default user and roles
-                dirname(__DIR__).'/../UserBundle/DataFixtures/ORM',
-            ];
-        }
+        $this->loadFixtures($classNames);
+    }
 
-        $loader = new ContainerAwareLoader($this->container);
-
-        foreach ($paths as $path) {
-            if (is_dir($path)) {
-                $loader->loadFromDirectory($path);
-            } elseif (file_exists($path)) {
-                $loader->loadFromFile($path);
-            }
-        }
-
-        $fixtures = $loader->getFixtures();
-
-        if (!$fixtures) {
-            throw new \InvalidArgumentException(
-                sprintf('Could not find any fixtures to load in: %s', "\n\n- ".implode("\n- ", $paths))
-            );
-        }
-
-        $purger = new ORMPurger($this->em);
-        $purger->setPurgeMode(ORMPurger::PURGE_MODE_DELETE);
-        $executor = new ORMExecutor($this->em, $purger);
-        $executor->execute($fixtures, true);
+    public function setCsrfHeader(string $intention = 'mautic_ajax_post'): void
+    {
+        $this->client->setServerParameter('HTTP_X-CSRF-Token', $this->getCsrfToken($intention));
     }
 
     /**
      * Use when POSTing directly to forms.
-     *
-     * @param string $intention
-     *
-     * @return string
      */
-    protected function getCsrfToken($intention)
+    protected function getCsrfToken(string $intention): string
     {
-        return $this->client->getContainer()->get('security.csrf.token_manager')->refreshToken($intention);
+        return $this->client->getContainer()->get('security.csrf.token_manager')->refreshToken($intention)->getValue();
     }
 
     /**
-     * @param              $name
-     * @param array        $params
-     * @param Command|null $command
-     *
-     * @return string
-     *
-     * @throws \Exception
+     * @return string[]
      */
-    protected function runCommand($name, array $params = [], Command $command = null)
+    protected function createAjaxHeaders(): array
     {
-        $params      = array_merge(['command' => $name], $params);
-        $kernel      = $this->container->get('kernel');
+        return [
+            'HTTP_Content-Type'     => 'application/x-www-form-urlencoded; charset=UTF-8',
+            'HTTP_X-Requested-With' => 'XMLHttpRequest',
+            'HTTP_X-CSRF-Token'     => $this->getCsrfToken('mautic_ajax_post'),
+        ];
+    }
+
+    /**
+     * @param array<mixed,mixed> $params
+     */
+    protected function testSymfonyCommand(string $name, array $params = [], ?Command $command = null): CommandTester
+    {
+        $kernel      = static::getContainer()->get('kernel');
         $application = new Application($kernel);
-        $application->setAutoExit(false);
 
         if ($command) {
-            if ($command instanceof ContainerAwareCommand) {
-                $command->setContainer($this->container);
-            }
-
             // Register the command
-            $application->add($command);
+            $application->addCommand($command);
+        } else {
+            $command = $application->find($name);
         }
 
-        $input  = new ArrayInput($params);
-        $output = new BufferedOutput();
-        $application->run($input, $output);
+        $bypassLockingOption = 'bypass-locking';
 
-        return $output->fetch();
+        if ($command->getDefinition()->hasOption($bypassLockingOption)) {
+            $params["--$bypassLockingOption"] = true;
+        }
+
+        $command       = $application->find($name);
+        $commandTester = new CommandTester($command);
+        $commandTester->execute($params);
+
+        return $commandTester;
     }
 }

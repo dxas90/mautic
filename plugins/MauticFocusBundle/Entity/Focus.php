@@ -1,113 +1,146 @@
 <?php
 
-/*
- * @copyright   2016 Mautic, Inc. All rights reserved
- * @author      Mautic, Inc
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace MauticPlugin\MauticFocusBundle\Entity;
 
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
 use Doctrine\ORM\Mapping as ORM;
 use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
 use Mautic\CoreBundle\Entity\FormEntity;
+use Mautic\CoreBundle\Entity\UuidInterface;
+use Mautic\CoreBundle\Entity\UuidTrait;
 use Mautic\FormBundle\Entity\Form;
+use Mautic\ProjectBundle\Entity\ProjectTrait;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints\NotBlank;
 use Symfony\Component\Validator\Mapping\ClassMetadata;
 
-/**
- * Class Focus.
- */
-class Focus extends FormEntity
+#[ApiResource(
+    operations: [
+        new GetCollection(uriTemplate: '/focus_items', security: "is_granted('focus:items:viewown')"),
+        new Get(uriTemplate: '/focus_items/{id}', security: "is_granted('focus:items:viewown')"),
+        new Post(uriTemplate: '/focus_items', security: "is_granted('focus:items:create')"),
+        new Put(uriTemplate: '/focus_items/{id}', security: "is_granted('focus:items:editown')"),
+        new Patch(uriTemplate: '/focus_items/{id}', security: "is_granted('focus:items:editother')"),
+        new Delete(uriTemplate: '/focus_items/{id}', security: "is_granted('focus:items:deleteown')"),
+    ],
+    normalizationContext: [
+        'groups'                  => ['focus:read'],
+        'swagger_definition_name' => 'Read',
+    ],
+    denormalizationContext: [
+        'groups'                  => ['focus:write'],
+        'swagger_definition_name' => 'Write',
+    ]
+)]
+class Focus extends FormEntity implements UuidInterface
 {
+    use UuidTrait;
+    use ProjectTrait;
+
     /**
      * @var int
      */
+    #[Groups(['focus:read'])]
     private $id;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $description;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $editor;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $html;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $htmlMode;
 
     /**
      * @var string
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $name;
 
-    /**
-     * @var
-     */
+    #[Groups(['focus:read', 'focus:write'])]
     private $category;
 
     /**
      * @var string
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $type;
 
     /**
-     * @var string
+     * @var string|null
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $website;
 
     /**
      * @var string
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $style;
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $publishUp;
 
     /**
-     * @var \DateTime
+     * @var \DateTimeInterface
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $publishDown;
 
     /**
-     * @var array()
+     * @var array<mixed>
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $properties = [];
 
     /**
      * @var array
      */
+    #[Groups(['focus:read', 'focus:write'])]
     private $utmTags = [];
 
     /**
-     * @var int
+     * @var int|null
      */
     private $form;
 
     /**
-     * @var string
+     * @var string|null
      */
     private $cache;
 
-    /**
-     * @param ClassMetadata $metadata
-     */
-    public static function loadValidatorMetadata(ClassMetadata $metadata)
+    public function __construct()
+    {
+        $this->initializeProjects();
+    }
+
+    public static function loadValidatorMetadata(ClassMetadata $metadata): void
     {
         $metadata->addPropertyConstraint(
             'name',
@@ -140,18 +173,16 @@ class Focus extends FormEntity
         parent::__clone();
     }
 
-    /**
-     * @param ORM\ClassMetadata $metadata
-     */
-    public static function loadMetadata(ORM\ClassMetadata $metadata)
+    public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
 
         $builder->setTable('focus')
-            ->setCustomRepositoryClass('MauticPlugin\MauticFocusBundle\Entity\FocusRepository')
+            ->setCustomRepositoryClass(FocusRepository::class)
             ->addIndex(['focus_type'], 'focus_type')
             ->addIndex(['style'], 'focus_style')
-            ->addIndex(['form_id'], 'focus_form');
+            ->addIndex(['form_id'], 'focus_form')
+            ->addIndex(['name'], 'focus_name');
 
         $builder->addIdColumns();
 
@@ -184,16 +215,17 @@ class Focus extends FormEntity
         $builder->addNullableField('editor', 'text');
 
         $builder->addNullableField('html', 'text');
+
+        static::addUuidField($builder);
+        self::addProjectsField($builder, 'focus_projects_xref', 'focus_id');
     }
 
     /**
      * Prepares the metadata for API usage.
-     *
-     * @param $metadata
      */
-    public static function loadApiMetadata(ApiMetadataDriver $metadata)
+    public static function loadApiMetadata(ApiMetadataDriver $metadata): void
     {
-        $metadata
+        $metadata->setGroupPrefix('focus')
             ->addListProperties(
                 [
                     'id',
@@ -219,12 +251,11 @@ class Focus extends FormEntity
                 ]
             )
             ->build();
+
+        self::addProjectsInLoadApiMetadata($metadata, 'focus');
     }
 
-    /**
-     * @return array
-     */
-    public function toArray()
+    public function toArray(): array
     {
         return get_object_vars($this);
     }
@@ -268,8 +299,6 @@ class Focus extends FormEntity
     }
 
     /**
-     * @param mixed $setHtml
-     *
      * @return Focus
      */
     public function setEditor($editor)
@@ -290,8 +319,6 @@ class Focus extends FormEntity
     }
 
     /**
-     * @param mixed $setHtml
-     *
      * @return Focus
      */
     public function setHtml($html)
@@ -312,8 +339,6 @@ class Focus extends FormEntity
     }
 
     /**
-     * @param mixed $html
-     *
      * @return Focus
      */
     public function setHtmlMode($htmlMode)
@@ -414,7 +439,7 @@ class Focus extends FormEntity
     }
 
     /**
-     * @return mixed
+     * @return array<mixed>
      */
     public function getProperties()
     {
@@ -422,7 +447,7 @@ class Focus extends FormEntity
     }
 
     /**
-     * @param mixed $properties
+     * @param array<mixed> $properties
      *
      * @return Focus
      */

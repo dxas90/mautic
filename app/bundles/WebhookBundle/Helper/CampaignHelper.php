@@ -1,67 +1,56 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\WebhookBundle\Helper;
 
 use Doctrine\Common\Collections\Collection;
-use Joomla\Http\Http;
+use GuzzleHttp\Client;
 use Mautic\CoreBundle\Helper\AbstractFormFieldHelper;
 use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Helper\TokenHelper;
+use Mautic\LeadBundle\Model\CompanyModel;
+use Mautic\WebhookBundle\Event\WebhookRequestEvent;
+use Mautic\WebhookBundle\WebhookEvents;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class CampaignHelper
 {
     /**
-     * @var Http
-     */
-    protected $connector;
-
-    /**
      * Cached contact values in format [contact_id => [key1 => val1, key2 => val1]].
-     *
-     * @var array
      */
-    private $contactsValues = [];
+    private array $contactsValues = [];
 
-    /**
-     * @param Http $connector
-     */
-    public function __construct(Http $connector)
-    {
-        $this->connector = $connector;
+    public function __construct(
+        protected Client $client,
+        protected CompanyModel $companyModel,
+        private EventDispatcherInterface $dispatcher,
+    ) {
     }
 
     /**
      * Prepares the neccessary data transformations and then makes the HTTP request.
-     *
-     * @param array $config
-     * @param Lead  $contact
      */
-    public function fireWebhook(array $config, Lead $contact)
+    public function fireWebhook(array $config, Lead $contact): void
     {
-        // dump($config);die;
         $payload = $this->getPayload($config, $contact);
         $headers = $this->getHeaders($config, $contact);
-        $this->makeRequest($config['url'], $config['method'], $config['timeout'], $headers, $payload);
+        $url     = rawurldecode(TokenHelper::findLeadTokens($config['url'], $this->getContactValues($contact), true));
+
+        $webhookRequestEvent = new WebhookRequestEvent($contact, $url, $headers, $payload);
+        $this->dispatcher->dispatch($webhookRequestEvent, WebhookEvents::WEBHOOK_ON_REQUEST);
+
+        $this->makeRequest(
+            $webhookRequestEvent->getUrl(),
+            $config['method'],
+            $config['timeout'],
+            $webhookRequestEvent->getHeaders(),
+            $webhookRequestEvent->getPayload()
+        );
     }
 
     /**
      * Gets the payload fields from the config and if there are tokens it translates them to contact values.
-     *
-     * @param array $config
-     * @param Lead  $contact
-     *
-     * @return array
      */
-    private function getPayload(array $config, Lead $contact)
+    private function getPayload(array $config, Lead $contact): array
     {
         $payload = !empty($config['additional_data']['list']) ? $config['additional_data']['list'] : '';
         $payload = array_flip(AbstractFormFieldHelper::parseList($payload));
@@ -71,13 +60,8 @@ class CampaignHelper
 
     /**
      * Gets the payload fields from the config and if there are tokens it translates them to contact values.
-     *
-     * @param array $config
-     * @param Lead  $contact
-     *
-     * @return array
      */
-    private function getHeaders(array $config, Lead $contact)
+    private function getHeaders(array $config, Lead $contact): array
     {
         $headers = !empty($config['headers']['list']) ? $config['headers']['list'] : '';
         $headers = array_flip(AbstractFormFieldHelper::parseList($headers));
@@ -89,51 +73,60 @@ class CampaignHelper
      * @param string $url
      * @param string $method
      * @param int    $timeout
-     * @param array  $headers
-     * @param array  $payload
      *
      * @throws \InvalidArgumentException
      * @throws \OutOfRangeException
      */
-    private function makeRequest($url, $method, $timeout, array $headers, array $payload)
+    private function makeRequest($url, $method, $timeout, array $headers, array $payload): void
     {
         switch ($method) {
             case 'get':
                 $payload  = $url.(parse_url($url, PHP_URL_QUERY) ? '&' : '?').http_build_query($payload);
-                $response = $this->connector->get($payload, $headers, $timeout);
+                $response = $this->client->get($payload, [
+                    \GuzzleHttp\RequestOptions::HEADERS => $headers,
+                    \GuzzleHttp\RequestOptions::TIMEOUT => $timeout,
+                ]);
                 break;
             case 'post':
             case 'put':
             case 'patch':
-                $response = $this->connector->$method($url, $payload, $headers, $timeout);
+                $headers  = array_change_key_case($headers);
+                $options  = [
+                    \GuzzleHttp\RequestOptions::HEADERS     => $headers,
+                    \GuzzleHttp\RequestOptions::TIMEOUT     => $timeout,
+                ];
+                if (array_key_exists('content-type', $headers) && 'application/json' == strtolower($headers['content-type'])) {
+                    $options[\GuzzleHttp\RequestOptions::BODY] = json_encode($payload);
+                } else {
+                    $options[\GuzzleHttp\RequestOptions::FORM_PARAMS] = $payload;
+                }
+                $response = $this->client->request($method, $url, $options);
                 break;
             case 'delete':
-                $response = $this->connector->delete($url, $headers, $timeout, $payload);
+                $response = $this->client->delete($url, [
+                    \GuzzleHttp\RequestOptions::HEADERS => $headers,
+                    \GuzzleHttp\RequestOptions::TIMEOUT => $timeout,
+                ]);
                 break;
             default:
                 throw new \InvalidArgumentException('HTTP method "'.$method.' is not supported."');
         }
 
-        if (!in_array($response->code, [200, 201])) {
-            throw new \OutOfRangeException('Campaign webhook response returned error code: '.$response->code);
+        if (!in_array($response->getStatusCode(), [200, 201])) {
+            throw new \OutOfRangeException('Campaign webhook response returned error code: '.$response->getStatusCode());
         }
     }
 
     /**
      * Translates tokens to values.
-     *
-     * @param array $rawTokens
-     * @param Lead  $contact
-     *
-     * @return array
      */
-    private function getTokenValues(array $rawTokens, Lead $contact)
+    private function getTokenValues(array $rawTokens, Lead $contact): array
     {
         $values        = [];
         $contactValues = $this->getContactValues($contact);
 
         foreach ($rawTokens as $key => $value) {
-            $values[$key] = urldecode(TokenHelper::findLeadTokens($value, $contactValues, true));
+            $values[$key] = rawurldecode(TokenHelper::findLeadTokens($value, $contactValues, true));
         }
 
         return $values;
@@ -142,8 +135,6 @@ class CampaignHelper
     /**
      * Gets array of contact values.
      *
-     * @param Lead $contact
-     *
      * @return array
      */
     private function getContactValues(Lead $contact)
@@ -151,17 +142,13 @@ class CampaignHelper
         if (empty($this->contactsValues[$contact->getId()])) {
             $this->contactsValues[$contact->getId()]              = $contact->getProfileFields();
             $this->contactsValues[$contact->getId()]['ipAddress'] = $this->ipAddressesToCsv($contact->getIpAddresses());
+            $this->contactsValues[$contact->getId()]['companies'] = $this->companyModel->getRepository()->getCompaniesByLeadId($contact->getId());
         }
 
         return $this->contactsValues[$contact->getId()];
     }
 
-    /**
-     * @param Collection $ipAddresses
-     *
-     * @return string
-     */
-    private function ipAddressesToCsv(Collection $ipAddresses)
+    private function ipAddressesToCsv(Collection $ipAddresses): string
     {
         $addresses = [];
         foreach ($ipAddresses as $ipAddress) {

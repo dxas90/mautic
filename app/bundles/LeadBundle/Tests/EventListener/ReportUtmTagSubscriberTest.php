@@ -1,29 +1,24 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
+declare(strict_types=1);
 
 namespace Mautic\LeadBundle\Tests\EventListener;
 
 use Doctrine\DBAL\Query\QueryBuilder;
 use Mautic\ChannelBundle\Helper\ChannelListHelper;
+use Mautic\CoreBundle\Translation\Translator;
 use Mautic\LeadBundle\EventListener\ReportUtmTagSubscriber;
 use Mautic\LeadBundle\Model\CompanyReportData;
 use Mautic\LeadBundle\Report\FieldsBuilder;
 use Mautic\ReportBundle\Event\ReportBuilderEvent;
 use Mautic\ReportBundle\Event\ReportGeneratorEvent;
 use Mautic\ReportBundle\Helper\ReportHelper;
-use Symfony\Component\Translation\TranslatorInterface;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
-class ReportUtmTagSubscriberTest extends \PHPUnit_Framework_TestCase
+class ReportUtmTagSubscriberTest extends \PHPUnit\Framework\TestCase
 {
-    public function testNotRelevantContextBuilder()
+    public function testNotRelevantContextBuilder(): void
     {
         $fieldsBuilderMock      = $this->createMock(FieldsBuilder::class);
         $companyReportDataMock  = $this->createMock(CompanyReportData::class);
@@ -41,7 +36,7 @@ class ReportUtmTagSubscriberTest extends \PHPUnit_Framework_TestCase
         $reportUtmTagSubscriber->onReportBuilder($reportBuilderEventMock);
     }
 
-    public function testNotRelevantContextGenerate()
+    public function testNotRelevantContextGenerate(): void
     {
         $fieldsBuilderMock        = $this->createMock(FieldsBuilder::class);
         $companyReportDataMock    = $this->createMock(CompanyReportData::class);
@@ -59,11 +54,11 @@ class ReportUtmTagSubscriberTest extends \PHPUnit_Framework_TestCase
         $reportUtmTagSubscriber->onReportGenerate($reportGeneratorEventMock);
     }
 
-    public function testReportBuilder()
+    public function testReportBuilder(): void
     {
         $translatorMock        = $this->createMock(TranslatorInterface::class);
-        $channelListHelperMock = $this->createMock(ChannelListHelper::class);
-        $reportHelperMock      = $this->createMock(ReportHelper::class);
+        $channelListHelperMock = new ChannelListHelper($this->createMock(EventDispatcher::class), $this->createMock(Translator::class));
+        $reportHelperMock      = new ReportHelper($this->createMock(EventDispatcher::class));
         $fieldsBuilderMock     = $this->createMock(FieldsBuilder::class);
         $companyReportDataMock = $this->createMock(CompanyReportData::class);
 
@@ -85,6 +80,23 @@ class ReportUtmTagSubscriberTest extends \PHPUnit_Framework_TestCase
             ->with('l.')
             ->willReturn($leadColumns);
 
+        $fieldsBuilderMock
+            ->expects($this->any())
+            ->method('getLeadFilter')
+            ->willReturn([
+                'tag' => [
+                    'label'     => 'mautic.core.filter.tags',
+                    'type'      => 'multiselect',
+                    'list'      => ['A', 'B', 'C'],
+                    'operators' => [
+                        'in'       => 'mautic.core.operator.in',
+                        'notIn'    => 'mautic.core.operator.notin',
+                        'empty'    => 'mautic.core.operator.isempty',
+                        'notEmpty' => 'mautic.core.operator.isnotempty',
+                    ],
+                ],
+            ]);
+
         $companyReportDataMock->expects($this->once())
             ->method('getCompanyData')
             ->with()
@@ -95,59 +107,71 @@ class ReportUtmTagSubscriberTest extends \PHPUnit_Framework_TestCase
         $segmentReportSubscriber = new ReportUtmTagSubscriber($fieldsBuilderMock, $companyReportDataMock);
         $segmentReportSubscriber->onReportBuilder($reportBuilderEvent);
 
-        $expected = [
-            'lead.utmTag' => [
-                'display_name' => 'mautic.lead.report.utm.utm_tag',
-                'columns'      => [
-                    'lead.name' => [
-                        'label' => null,
-                        'type'  => 'bool',
-                        'alias' => 'name',
-                    ],
-                    'comp.name' => [
-                        'label' => null,
-                        'type'  => 'bool',
-                        'alias' => 'name',
-                    ],
-                    'utm.utm_campaign' => [
-                        'label' => null,
-                        'type'  => 'text',
-                        'alias' => 'utm_campaign',
-                    ],
-                    'utm.utm_content' => [
-                        'label' => null,
-                        'type'  => 'text',
-                        'alias' => 'utm_content',
-                    ],
-                    'utm.utm_medium' => [
-                        'label' => null,
-                        'type'  => 'text',
-                        'alias' => 'utm_medium',
-                    ],
-                    'utm.utm_source' => [
-                        'label' => null,
-                        'type'  => 'text',
-                        'alias' => 'utm_source',
-                    ],
-                    'utm.utm_term' => [
-                        'label' => null,
-                        'type'  => 'text',
-                        'alias' => 'utm_term',
-                    ],
-                ],
-                'group' => 'contacts',
+        $expectedColumns = [
+            'lead.name' => [
+                'label' => '',
+                'type'  => 'bool',
+                'alias' => 'name',
+            ],
+            'comp.name' => [
+                'label' => '',
+                'type'  => 'bool',
+                'alias' => 'name',
+            ],
+            'utm.utm_campaign' => [
+                'label' => '',
+                'type'  => 'text',
+                'alias' => 'utm_campaign',
+            ],
+            'utm.utm_content' => [
+                'label' => '',
+                'type'  => 'text',
+                'alias' => 'utm_content',
+            ],
+            'utm.utm_medium' => [
+                'label' => '',
+                'type'  => 'text',
+                'alias' => 'utm_medium',
+            ],
+            'utm.utm_source' => [
+                'label' => '',
+                'type'  => 'text',
+                'alias' => 'utm_source',
+            ],
+            'utm.utm_term' => [
+                'label' => '',
+                'type'  => 'text',
+                'alias' => 'utm_term',
             ],
         ];
 
-        $this->assertEquals($expected, $reportBuilderEvent->getTables()); //Different order of keys on PHP 5.6.
+        $expected = [
+            'lead.utmTag' => [
+                'display_name' => 'mautic.lead.report.utm.utm_tag',
+                'columns'      => $expectedColumns,
+                'filters'      => array_merge($expectedColumns, [
+                    'tag' => [
+                        'label'     => '',
+                        'type'      => 'multiselect',
+                        'list'      => ['A', 'B', 'C'],
+                        'operators' => [
+                            'in'       => 'mautic.core.operator.in',
+                            'notIn'    => 'mautic.core.operator.notin',
+                            'empty'    => 'mautic.core.operator.isempty',
+                            'notEmpty' => 'mautic.core.operator.isnotempty',
+                        ],
+                        'alias' => 'tag',
+                    ],
+                ]),
+                'group'   => 'contacts',
+            ],
+        ];
+
+        $this->assertSame($expected, $reportBuilderEvent->getTables());
     }
 
-    public function testReportGenerateNoJoinedTables()
+    public function testReportGenerateNoJoinedTables(): void
     {
-        if (!defined('MAUTIC_TABLE_PREFIX')) {
-            define('MAUTIC_TABLE_PREFIX', '');
-        }
-
         $reportGeneratorEventMock = $this->getReportGeneratorEventMock();
         $reportUtmTagSubscriber   = $this->getReportUtmTagSubscriber();
         $queryBuilderMock         = $this->getQueryBuilderMock();
@@ -159,32 +183,33 @@ class ReportUtmTagSubscriberTest extends \PHPUnit_Framework_TestCase
         $reportUtmTagSubscriber->onReportGenerate($reportGeneratorEventMock);
     }
 
-    public function testReportGenerateWithUsers()
+    public function testReportGenerateWithUsers(): void
     {
-        if (!defined('MAUTIC_TABLE_PREFIX')) {
-            define('MAUTIC_TABLE_PREFIX', '');
-        }
-
         $reportGeneratorEventMock = $this->getReportGeneratorEventMock();
         $reportUtmTagSubscriber   = $this->getReportUtmTagSubscriber();
         $queryBuilderMock         = $this->getQueryBuilderMock();
 
-        $reportGeneratorEventMock->expects($this->at(1))
+        $reportGeneratorEventMock->expects($this->once())
             ->method('getQueryBuilder')
             ->willReturn($queryBuilderMock);
+        $matcher = $this->exactly(2);
 
-        $reportGeneratorEventMock->expects($this->at(2))
-            ->method('hasColumn')
-            ->with(['u.first_name', 'u.last_name'])
-            ->willReturn(true);
+        $reportGeneratorEventMock->expects($matcher)
+            ->method('usesColumn')->willReturnCallback(function (...$parameters) use ($matcher) {
+                if (1 === $matcher->numberOfInvocations()) {
+                    $this->assertSame(['u.first_name', 'u.last_name'], $parameters[0]);
+                }
+                if (2 === $matcher->numberOfInvocations()) {
+                    $this->assertSame('i.ip_address', $parameters[0]);
+                }
+
+                return true;
+            });
 
         $reportUtmTagSubscriber->onReportGenerate($reportGeneratorEventMock);
     }
 
-    /**
-     * @return ReportUtmTagSubscriber
-     */
-    private function getReportUtmTagSubscriber()
+    private function getReportUtmTagSubscriber(): ReportUtmTagSubscriber
     {
         $fieldsBuilderMock      = $this->createMock(FieldsBuilder::class);
         $companyReportDataMock  = $this->createMock(CompanyReportData::class);
@@ -194,13 +219,13 @@ class ReportUtmTagSubscriberTest extends \PHPUnit_Framework_TestCase
     }
 
     /**
-     * @return ReportGeneratorEvent|\PHPUnit_Framework_MockObject_MockObject
+     * @return ReportGeneratorEvent|\PHPUnit\Framework\MockObject\MockObject
      */
     private function getReportGeneratorEventMock()
     {
         $reportGeneratorEventMock = $this->createMock(ReportGeneratorEvent::class);
 
-        $reportGeneratorEventMock->expects($this->at(0))
+        $reportGeneratorEventMock->expects($this->once())
             ->method('checkContext')
             ->with(['lead.utmTag'])
             ->willReturn(true);
@@ -209,21 +234,29 @@ class ReportUtmTagSubscriberTest extends \PHPUnit_Framework_TestCase
     }
 
     /**
-     * @return QueryBuilder|\PHPUnit_Framework_MockObject_MockObject
+     * @return QueryBuilder|\PHPUnit\Framework\MockObject\MockObject
      */
     private function getQueryBuilderMock()
     {
         $queryBuilderMock = $this->createMock(QueryBuilder::class);
 
-        $queryBuilderMock->expects($this->at(0))
+        $queryBuilderMock->expects($this->once())
             ->method('from')
             ->with(MAUTIC_TABLE_PREFIX.'lead_utmtags', 'utm')
             ->willReturn($queryBuilderMock);
+        $matcher = $this->any();
 
-        $queryBuilderMock->expects($this->at(1))
-            ->method('leftJoin')
-            ->with('utm', MAUTIC_TABLE_PREFIX.'leads', 'l', 'l.id = utm.lead_id')
-            ->willReturn($queryBuilderMock);
+        $queryBuilderMock->expects($matcher)->method('leftJoin')
+            ->willReturnCallback(function (...$parameters) use ($matcher, $queryBuilderMock) {
+                if (1 === $matcher->numberOfInvocations()) {
+                    $this->assertSame('utm', $parameters[0]);
+                    $this->assertSame(MAUTIC_TABLE_PREFIX.'leads', $parameters[1]);
+                    $this->assertSame('l', $parameters[2]);
+                    $this->assertSame('l.id = utm.lead_id', $parameters[3]);
+                }
+
+                return $queryBuilderMock;
+            });
 
         return $queryBuilderMock;
     }

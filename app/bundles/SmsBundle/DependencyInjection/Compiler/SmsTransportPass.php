@@ -1,42 +1,31 @@
 <?php
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
 
 namespace Mautic\SmsBundle\DependencyInjection\Compiler;
 
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
-use Symfony\Component\DependencyInjection\Compiler\RepeatablePassInterface;
-use Symfony\Component\DependencyInjection\Compiler\RepeatedPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
 
-/**
- * Class SmsTransportPass.
- */
-class SmsTransportPass implements CompilerPassInterface, RepeatablePassInterface
+class SmsTransportPass implements CompilerPassInterface
 {
-    /**
-     * @var RepeatedPass
-     */
-    private $repeatedPass;
+    private ?ContainerBuilder $container = null;
 
-    /**
-     * @param ContainerBuilder $container
-     */
-    public function process(ContainerBuilder $container)
+    public function process(ContainerBuilder $container): void
     {
-        if (!$container->has('mautic.sms.transport_chain')) {
+        $this->container = $container;
+
+        $this->registerTransports();
+        $this->registerCallbacks();
+    }
+
+    private function registerTransports(): void
+    {
+        if (!$this->container->has('mautic.sms.transport_chain')) {
             return;
         }
 
-        $definition     = $container->getDefinition('mautic.sms.transport_chain');
-        $taggedServices = $container->findTaggedServiceIds('mautic.sms_transport');
+        $definition     = $this->container->getDefinition('mautic.sms.transport_chain');
+        $taggedServices = $this->container->findTaggedServiceIds('mautic.sms_transport');
         foreach ($taggedServices as $id => $tags) {
             $definition->addMethodCall('addTransport', [
                 $id,
@@ -47,11 +36,18 @@ class SmsTransportPass implements CompilerPassInterface, RepeatablePassInterface
         }
     }
 
-    /**
-     * @param RepeatedPass $repeatedPass
-     */
-    public function setRepeatedPass(RepeatedPass $repeatedPass)
+    private function registerCallbacks(): void
     {
-        $this->repeatedPass = $repeatedPass;
+        if (!$this->container->has('mautic.sms.callback_handler_container')) {
+            return;
+        }
+
+        $definition     = $this->container->getDefinition('mautic.sms.callback_handler_container');
+        $taggedServices = $this->container->findTaggedServiceIds('mautic.sms_callback_handler');
+        foreach ($taggedServices as $id => $tags) {
+            $definition->addMethodCall('registerHandler', [
+                new Reference($id),
+            ]);
+        }
     }
 }

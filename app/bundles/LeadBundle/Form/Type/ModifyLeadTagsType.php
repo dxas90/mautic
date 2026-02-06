@@ -1,44 +1,26 @@
 <?php
 
-/*
- * @copyright   2015 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Form\Type;
 
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\FormBuilderInterface;
-use Symfony\Component\Translation\TranslatorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
+/**
+ * @extends AbstractType<mixed>
+ */
 class ModifyLeadTagsType extends AbstractType
 {
-    /**
-     * @var TranslatorInterface
-     */
-    private $translator;
-
-    /**
-     * @param TranslatorInterface $factory
-     */
-    public function __construct(TranslatorInterface $translator)
-    {
-        $this->translator = $translator;
+    public function __construct(
+        private TranslatorInterface $translator,
+    ) {
     }
 
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add(
             'add_tags',
-            'lead_tag',
+            TagType::class,
             [
                 'label' => 'mautic.lead.tags.add',
                 'attr'  => [
@@ -47,14 +29,14 @@ class ModifyLeadTagsType extends AbstractType
                     'data-allow-add'       => 'true',
                     'onchange'             => 'Mautic.createLeadTag(this)',
                 ],
-                'data'            => (isset($options['data']['add_tags'])) ? $options['data']['add_tags'] : null,
+                'data'            => $options['data']['add_tags'] ?? null,
                 'add_transformer' => true,
             ]
         );
 
         $builder->add(
             'remove_tags',
-            'lead_tag',
+            TagType::class,
             [
                 'label' => 'mautic.lead.tags.remove',
                 'attr'  => [
@@ -63,17 +45,9 @@ class ModifyLeadTagsType extends AbstractType
                     'data-allow-add'       => 'true',
                     'onchange'             => 'Mautic.createLeadTag(this)',
                 ],
-                'data'            => (isset($options['data']['remove_tags'])) ? $options['data']['remove_tags'] : null,
+                'data'            => $options['data']['remove_tags'] ?? null,
                 'add_transformer' => true,
             ]
         );
-    }
-
-    /**
-     * @return string
-     */
-    public function getName()
-    {
-        return 'modify_lead_tags';
     }
 }

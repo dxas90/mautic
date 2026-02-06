@@ -1,77 +1,38 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CoreBundle\EventListener;
 
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\HttpKernel\Event\GetResponseEvent;
+use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Routing\RouterInterface;
 
 class RouterSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var RouterInterface
-     */
-    private $router;
+    private string|int $httpsPort;
+
+    private string|int $httpPort;
 
     /**
-     * @var string|null
+     * @param string|null $scheme
+     * @param string|null $host
+     * @param string|null $httpsPort
+     * @param string|null $httpPort
+     * @param string|null $baseUrl
      */
-    private $baseUrl;
-
-    /**
-     * @var string|null
-     */
-    private $scheme;
-
-    /**
-     * @var string|null
-     */
-    private $host;
-
-    /**
-     * @var string|null
-     */
-    private $httpsPort;
-
-    /**
-     * @var string|null
-     */
-    private $httpPort;
-
-    /**
-     * RouterSubscriber constructor.
-     *
-     * @param RouterInterface $router
-     * @param null|string     $scheme
-     * @param null|string     $host
-     * @param null|string     $httpsPort
-     * @param null|string     $httpPort
-     * @param null|string     $baseUrl
-     */
-    public function __construct(RouterInterface $router, $scheme, $host, $httpsPort, $httpPort, $baseUrl)
-    {
-        $this->router    = $router;
-        $this->scheme    = $scheme;
-        $this->host      = $host;
-        $this->httpsPort = $httpsPort;
-        $this->httpPort  = $httpPort;
-        $this->baseUrl   = $baseUrl;
+    public function __construct(
+        private RouterInterface $router,
+        private $scheme,
+        private $host,
+        $httpsPort,
+        $httpPort,
+        private $baseUrl,
+    ) {
+        $this->httpsPort = $httpsPort ?? 443;
+        $this->httpPort  = $httpPort ?? 80;
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             KernelEvents::REQUEST => ['setRouterRequestContext', 1],
@@ -82,28 +43,28 @@ class RouterSubscriber implements EventSubscriberInterface
      * This forces generated routes to be the same as what is configured as Mautic's site_url
      * in order to prevent mismatches between cached URLs generated during web requests and URLs generated
      * via CLI/cron jobs.
-     *
-     * @param GetResponseEvent $event
      */
-    public function setRouterRequestContext(GetResponseEvent $event)
+    public function setRouterRequestContext(RequestEvent $event): void
     {
         if (empty($this->host)) {
             return;
         }
 
-        if (!$event->isMasterRequest()) {
+        if (!$event->isMainRequest()) {
             return;
         }
 
         $originalContext = $this->router->getContext();
-        if ($originalContext->getBaseUrl() && !$this->baseUrl) {
-            // Likely in installation where the request parameters passed into this listener are not set yet so just use the original context
-            return;
+
+        // Remove index.php, and ending forward slash from the URL to match what is configured in SiteUrlEnvVars
+        $originalBaseUrl = str_replace(['index.php'], '', $originalContext->getBaseUrl());
+        if (str_ends_with($originalBaseUrl, '/')) {
+            $originalBaseUrl = substr($originalBaseUrl, 0, -1);
         }
 
-        // Append index_dev.php for installations at the root level
-        if ('dev' === MAUTIC_ENV && strpos($this->baseUrl, 'index_dev.php') === false) {
-            $this->baseUrl = $this->baseUrl.'/index_dev.php';
+        if ($originalBaseUrl && !$this->baseUrl) {
+            // Likely in installation where the request parameters passed into this listener are not set yet so just use the original context
+            return;
         }
 
         $context = $this->router->getContext();

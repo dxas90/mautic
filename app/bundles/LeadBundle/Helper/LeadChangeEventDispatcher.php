@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Helper;
 
 use Mautic\LeadBundle\Entity\DoNotContact;
@@ -19,36 +10,16 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class LeadChangeEventDispatcher
 {
-    /**
-     * @var EventDispatcherInterface
-     */
-    private $dispatcher;
+    private ?Lead $lead = null;
 
-    /**
-     * @var Lead
-     */
-    private $lead;
+    private ?array $changes = null;
 
-    /**
-     * @var array
-     */
-    private $changes;
-
-    /**
-     * LeadChangeEventDispatcher constructor.
-     *
-     * @param EventDispatcherInterface $dispatcher
-     */
-    public function __construct(EventDispatcherInterface $dispatcher)
-    {
-        $this->dispatcher = $dispatcher;
+    public function __construct(
+        private EventDispatcherInterface $dispatcher,
+    ) {
     }
 
-    /**
-     * @param Events\LeadEvent $event
-     * @param array            $changes
-     */
-    public function dispatchEvents(Events\LeadEvent $event, array $changes)
+    public function dispatchEvents(Events\LeadEvent $event, array $changes): void
     {
         $this->lead    = $event->getLead();
         $this->changes = $changes;
@@ -59,22 +30,16 @@ class LeadChangeEventDispatcher
         $this->dispatchDncChangeEvent();
     }
 
-    /**
-     * @param Events\LeadEvent $event
-     */
-    private function dispatchDateIdentifiedEvent(Events\LeadEvent $event)
+    private function dispatchDateIdentifiedEvent(Events\LeadEvent $event): void
     {
         if (!isset($this->changes['dateIdentified'])) {
             return;
         }
 
-        $this->dispatcher->dispatch(LeadEvents::LEAD_IDENTIFIED, $event);
+        $this->dispatcher->dispatch($event, LeadEvents::LEAD_IDENTIFIED);
     }
 
-    /**
-     * @param Events\LeadEvent $event
-     */
-    private function dispatchPointChangeEvent(Events\LeadEvent $event)
+    private function dispatchPointChangeEvent(Events\LeadEvent $event): void
     {
         if (!isset($this->changes['points'])) {
             return;
@@ -93,31 +58,31 @@ class LeadChangeEventDispatcher
         }
 
         $pointsEvent = new Events\PointsChangeEvent($this->lead, $this->changes['points'][0], $this->changes['points'][1]);
-        $this->dispatcher->dispatch(LeadEvents::LEAD_POINTS_CHANGE, $pointsEvent);
+        $this->dispatcher->dispatch($pointsEvent, LeadEvents::LEAD_POINTS_CHANGE);
     }
 
-    private function dispatchUtmTagsChangeEvent()
+    private function dispatchUtmTagsChangeEvent(): void
     {
         if (!isset($this->changes['utmtags'])) {
             return;
         }
 
         $utmTagsEvent = new Events\LeadUtmTagsEvent($this->lead, $this->changes['utmtags']);
-        $this->dispatcher->dispatch(LeadEvents::LEAD_UTMTAGS_ADD, $utmTagsEvent);
+        $this->dispatcher->dispatch($utmTagsEvent, LeadEvents::LEAD_UTMTAGS_ADD);
     }
 
-    private function dispatchDncChangeEvent()
+    private function dispatchDncChangeEvent(): void
     {
         if (!isset($this->changes['dnc_channel_status'])) {
             return;
         }
 
         foreach ($this->changes['dnc_channel_status'] as $channel => $status) {
-            $oldStatus = isset($status['old_reason']) ? $status['old_reason'] : DoNotContact::IS_CONTACTABLE;
+            $oldStatus = $status['old_reason'] ?? DoNotContact::IS_CONTACTABLE;
             $newStatus = $status['reason'];
 
             $event = new Events\ChannelSubscriptionChange($this->lead, $channel, $oldStatus, $newStatus);
-            $this->dispatcher->dispatch(LeadEvents::CHANNEL_SUBSCRIPTION_CHANGED, $event);
+            $this->dispatcher->dispatch($event, LeadEvents::CHANNEL_SUBSCRIPTION_CHANGED);
         }
     }
 }

@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Helper;
 
 use Mautic\LeadBundle\Entity\LeadField;
@@ -16,27 +7,15 @@ use Mautic\LeadBundle\Model\FieldModel;
 
 class FieldAliasHelper
 {
-    /**
-     * @var FieldModel
-     */
-    private $fieldModel;
-
-    /**
-     * @param FieldModel $fieldModel
-     */
-    public function __construct(FieldModel $fieldModel)
-    {
-        $this->fieldModel = $fieldModel;
+    public function __construct(
+        private FieldModel $fieldModel,
+    ) {
     }
 
     /**
      * Cleans the alias and if it's not unique it will make it unique.
-     *
-     * @param LeadField $field
-     *
-     * @return LeadField
      */
-    public function makeAliasUnique(LeadField $field)
+    public function makeAliasUnique(LeadField $field): LeadField
     {
         // alias cannot be changed for existing fields
         if ($field->getId()) {
@@ -44,7 +23,7 @@ class FieldAliasHelper
         }
 
         // set alias as name if alias is empty
-        $alias = $field->getAlias() ?: $field->getName();
+        $alias = ($field->getAlias() ?: $field->getName()) ?: '';
 
         // clean the alias
         $alias = $this->fieldModel->cleanAlias($alias, 'f_', 25);
@@ -52,7 +31,7 @@ class FieldAliasHelper
         // make sure alias is not already taken
         $repo      = $this->fieldModel->getRepository();
         $testAlias = $alias;
-        $aliases   = $repo->getAliases($field->getId(), false, true, $field->getObject());
+        $aliases   = $repo->getAliases($field->getId(), false, true, null);
         $count     = (int) in_array($testAlias, $aliases);
         $aliasTag  = $count;
 

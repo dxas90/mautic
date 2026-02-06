@@ -1,55 +1,66 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Tests\Executioner\Logger;
 
 use Doctrine\Common\Collections\ArrayCollection;
+use Mautic\CampaignBundle\Entity\Campaign;
+use Mautic\CampaignBundle\Entity\Event;
 use Mautic\CampaignBundle\Entity\LeadEventLog;
 use Mautic\CampaignBundle\Entity\LeadEventLogRepository;
 use Mautic\CampaignBundle\Entity\LeadRepository;
 use Mautic\CampaignBundle\Executioner\Logger\EventLogger;
+use Mautic\CampaignBundle\Model\SummaryModel;
+use Mautic\CoreBundle\Entity\IpAddress;
+use Mautic\CoreBundle\Helper\CoreParametersHelper;
 use Mautic\CoreBundle\Helper\IpLookupHelper;
+use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Tracker\ContactTracker;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\TestCase;
 
-class EventLoggerTest extends \PHPUnit_Framework_TestCase
+class EventLoggerTest extends TestCase
 {
     /**
-     * @var LeadRepository|\PHPUnit_Framework_MockObject_MockObject
+     * @var IpLookupHelper&MockObject
      */
-    private $ipLookupHelper;
+    private MockObject $ipLookupHelper;
 
     /**
-     * @var ContactTracker|\PHPUnit_Framework_MockObject_MockObject
+     * @var ContactTracker|MockObject
      */
-    private $contactTracker;
+    private MockObject $contactTracker;
 
     /**
-     * @var LeadEventLogRepository|\PHPUnit_Framework_MockObject_MockObject
+     * @var LeadEventLogRepository|MockObject
      */
-    private $leadEventLogRepository;
+    private MockObject $leadEventLogRepository;
 
     /**
-     * @var LeadRepository|\PHPUnit_Framework_MockObject_MockObject
+     * @var LeadRepository|MockObject
      */
-    private $leadRepository;
+    private MockObject $leadRepository;
 
-    protected function setUp()
+    /**
+     * @var SummaryModel|MockObject
+     */
+    private MockObject $summaryModel;
+
+    /**
+     * @var CoreParametersHelper&MockObject
+     */
+    private MockObject $coreParametersHelper;
+
+    protected function setUp(): void
     {
         $this->ipLookupHelper         = $this->createMock(IpLookupHelper::class);
         $this->contactTracker         = $this->createMock(ContactTracker::class);
         $this->leadEventLogRepository = $this->createMock(LeadEventLogRepository::class);
         $this->leadRepository         = $this->createMock(LeadRepository::class);
+        $this->summaryModel           = $this->createMock(SummaryModel::class);
+        $this->coreParametersHelper   = $this->createMock(CoreParametersHelper::class);
     }
 
-    public function testAllLogsAreReturnedWithFinalPersist()
+    public function testAllLogsAreReturnedWithFinalPersist(): void
     {
         $logCollection = new ArrayCollection();
         while ($logCollection->count() < 60) {
@@ -74,13 +85,51 @@ class EventLoggerTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals($logCollection->getValues(), $persistedLogs->getValues());
     }
 
-    private function getLogger()
+    public function testBuildLogEntry(): void
+    {
+        $this->ipLookupHelper->method('getIpAddress')->willReturn(new IpAddress());
+
+        $this->leadRepository->expects($this->exactly(3))
+            ->method('getContactRotations')
+            ->willReturnOnConsecutiveCalls(
+                [1 => ['rotation' => 1, 'manually_removed' => 0]],
+                [1 => ['rotation' => 2, 'manually_removed' => 0]],
+                [1 => ['rotation' => 1, 'manually_removed' => 0]],
+            );
+
+        /** @var MockObject&Campaign $campaign */
+        $campaign = $this->createMock(Campaign::class);
+        $campaign->method('getId')->willReturnOnConsecutiveCalls(1, 1, 1, 1, 2, 2);
+
+        $event = new Event();
+        $event->setCampaign($campaign);
+
+        /** @var MockObject&Lead $contact */
+        $contact = $this->createMock(Lead::class);
+        $contact->method('getId')->willReturn(1);
+
+        // rotation for campaign 1 and contact 1
+        $log = $this->getLogger()->buildLogEntry($event, $contact, false);
+        $this->assertEquals(1, $log->getRotation());
+
+        // rotation for campaign 1 and contact 1
+        $log = $this->getLogger()->buildLogEntry($event, $contact, false);
+        $this->assertEquals(2, $log->getRotation());
+
+        // rotation for campaign 2 and contact 1
+        $log = $this->getLogger()->buildLogEntry($event, $contact, false);
+        $this->assertEquals(1, $log->getRotation());
+    }
+
+    private function getLogger(): EventLogger
     {
         return new EventLogger(
             $this->ipLookupHelper,
             $this->contactTracker,
             $this->leadEventLogRepository,
-            $this->leadRepository
+            $this->leadRepository,
+            $this->summaryModel,
+            $this->coreParametersHelper
         );
     }
 }

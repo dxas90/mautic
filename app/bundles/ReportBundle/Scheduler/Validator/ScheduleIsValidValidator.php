@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
-*/
-
 namespace Mautic\ReportBundle\Scheduler\Validator;
 
 use Mautic\ReportBundle\Entity\Report;
@@ -21,19 +12,15 @@ use Symfony\Component\Validator\ConstraintValidator;
 
 class ScheduleIsValidValidator extends ConstraintValidator
 {
-    /** @var SchedulerBuilder */
-    private $schedulerBuilder;
-
-    public function __construct(SchedulerBuilder $schedulerBuilder)
-    {
-        $this->schedulerBuilder = $schedulerBuilder;
+    public function __construct(
+        private SchedulerBuilder $schedulerBuilder,
+    ) {
     }
 
     /**
-     * @param Report     $report
-     * @param Constraint $constraint
+     * @param Report $report
      */
-    public function validate($report, Constraint $constraint)
+    public function validate($report, Constraint $constraint): void
     {
         if (!$report->isScheduled()) {
             $report->setAsNotScheduled();
@@ -59,8 +46,8 @@ class ScheduleIsValidValidator extends ConstraintValidator
                 $this->buildScheduler($report);
 
                 return;
-            } catch (ScheduleNotValidException $e) {
-                $this->addViolation();
+            } catch (ScheduleNotValidException) {
+                $this->addReportScheduleNotValidViolation();
             }
         }
         if ($report->isScheduledMonthly()) {
@@ -69,28 +56,28 @@ class ScheduleIsValidValidator extends ConstraintValidator
                 $this->buildScheduler($report);
 
                 return;
-            } catch (ScheduleNotValidException $e) {
-                $this->addViolation();
+            } catch (ScheduleNotValidException) {
+                $this->addReportScheduleNotValidViolation();
             }
         }
     }
 
-    private function addViolation()
+    private function addReportScheduleNotValidViolation(): void
     {
         $this->context->buildViolation('mautic.report.schedule.notValid')
             ->atPath('isScheduled')
             ->addViolation();
     }
 
-    private function buildScheduler(Report $report)
+    private function buildScheduler(Report $report): void
     {
         try {
             $this->schedulerBuilder->getNextEvent($report);
 
             return;
-        } catch (InvalidSchedulerException $e) {
+        } catch (InvalidSchedulerException) {
             $message = 'mautic.report.schedule.notValid';
-        } catch (NotSupportedScheduleTypeException $e) {
+        } catch (NotSupportedScheduleTypeException) {
             $message = 'mautic.report.schedule.notSupportedType';
         }
 

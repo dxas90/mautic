@@ -1,59 +1,113 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CoreBundle\Form\Type;
 
 use Mautic\CoreBundle\Form\DataTransformer\ArrayStringTransformer;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\HiddenType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 
 /**
- * Class ConfigType.
+ * @extends AbstractType<mixed>
  */
 class ConfigThemeType extends AbstractType
 {
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add(
+            'brand_name',
+            TextType::class,
+            [
+                'label'      => 'mautic.core.config.form.brand_name',
+                'label_attr' => [
+                    'class' => 'control-label',
+                ],
+                'attr'  => [
+                    'class'   => 'form-control',
+                    'tooltip' => 'mautic.core.config.form.brand_name.tooltip',
+                ],
+                'required' => false,
+                'data'     => $options['data']['brand_name'] ?? '',
+            ]
+        );
+
+        $builder->add(
+            'primary_brand_color',
+            TextType::class,
+            [
+                'label'      => 'mautic.core.config.form.primary_brand_color',
+                'label_attr' => [
+                    'class' => 'control-label',
+                ],
+                'attr'  => [
+                    'class'        => 'form-control minicolors-input',
+                    'tooltip'      => 'mautic.core.config.form.primary_brand_color.tooltip',
+                    'data-toggle'  => 'color',
+                    'autocomplete' => 'false',
+                    'size'         => '7',
+                ],
+                'required' => false,
+            ]
+        );
+
+        $builder->add(
             'theme',
-            'theme_list',
+            ThemeListType::class,
             [
                 'label' => 'mautic.core.config.form.theme',
                 'attr'  => [
                     'class'   => 'form-control',
-                    'tooltip' => 'mautic.page.form.template.help',
+                    'tooltip' => 'mautic.core.config.form.theme.tooltip',
                 ],
             ]
         );
-        $arrayStringTransformer = new ArrayStringTransformer();
+
+        // Accent
         $builder->add(
-            $builder->create('theme_import_allowed_extensions', 'text', [
-                'label'      => 'mautic.core.config.form.theme.import.allowed.extensions',
+            'accent',
+            HiddenType::class,
+            [
+                'label'      => 'mautic.user.preferences.accent',
                 'label_attr' => ['class' => 'control-label'],
                 'attr'       => [
-                    'class'   => 'form-control',
+                    'class' => 'form-control',
                 ],
                 'required' => false,
-            ])->addViewTransformer($arrayStringTransformer)
+            ]
+        );
+
+        // Rounded corners
+        $builder->add(
+            'rounded_corners',
+            HiddenType::class,
+            [
+                'attr'       => [
+                    'class' => 'form-control',
+                ],
+                'required' => false,
+            ]
+        );
+
+        $builder->add(
+            $builder->create(
+                'theme_import_allowed_extensions',
+                TextType::class,
+                [
+                    'label'      => 'mautic.core.config.form.theme.import.allowed.extensions',
+                    'label_attr' => [
+                        'class' => 'control-label',
+                    ],
+                    'attr'       => [
+                        'class' => 'form-control',
+                    ],
+                    'required'   => false,
+                ]
+            )->addViewTransformer(new ArrayStringTransformer())
         );
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getBlockPrefix(): string
     {
         return 'themeconfig';
     }

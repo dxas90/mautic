@@ -1,18 +1,8 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Tests\Executioner\ContactFinder;
 
 use Doctrine\Common\Collections\ArrayCollection;
-use Mautic\CampaignBundle\Entity\CampaignRepository;
 use Mautic\CampaignBundle\Entity\Event;
 use Mautic\CampaignBundle\Entity\LeadRepository as CampaignLeadRepository;
 use Mautic\CampaignBundle\Executioner\ContactFinder\InactiveContactFinder;
@@ -22,39 +12,25 @@ use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Entity\LeadRepository;
 use Psr\Log\NullLogger;
 
-class InactiveContactFinderTest extends \PHPUnit_Framework_TestCase
+class InactiveContactFinderTest extends \PHPUnit\Framework\TestCase
 {
     /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|LeadRepository
+     * @var \PHPUnit\Framework\MockObject\MockObject|LeadRepository
      */
-    private $leadRepository;
+    private \PHPUnit\Framework\MockObject\MockObject $leadRepository;
 
     /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|CampaignRepository
+     * @var \PHPUnit\Framework\MockObject\MockObject|CampaignLeadRepository
      */
-    private $campaignRepository;
+    private \PHPUnit\Framework\MockObject\MockObject $campaignLeadRepository;
 
-    /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|CampaignLeadRepository
-     */
-    private $campaignLeadRepository;
-
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->leadRepository = $this->getMockBuilder(LeadRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $this->campaignRepository = $this->getMockBuilder(CampaignRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $this->campaignLeadRepository = $this->getMockBuilder(CampaignLeadRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->leadRepository         = $this->createMock(LeadRepository::class);
+        $this->campaignLeadRepository = $this->createMock(CampaignLeadRepository::class);
     }
 
-    public function testNoContactsFoundExceptionIsThrown()
+    public function testNoContactsFoundExceptionIsThrown(): void
     {
         $this->campaignLeadRepository->expects($this->once())
             ->method('getInactiveContacts')
@@ -66,7 +42,7 @@ class InactiveContactFinderTest extends \PHPUnit_Framework_TestCase
         $this->getContactFinder()->getContacts(1, new Event(), $limiter);
     }
 
-    public function testNoContactsFoundExceptionIsThrownIfEntitiesAreNotFound()
+    public function testNoContactsFoundExceptionIsThrownIfEntitiesAreNotFound(): void
     {
         $contactMemberDates = [
             1 => new \DateTime(),
@@ -78,7 +54,7 @@ class InactiveContactFinderTest extends \PHPUnit_Framework_TestCase
 
         $this->leadRepository->expects($this->once())
             ->method('getContactCollection')
-            ->willReturn([]);
+            ->willReturn(new ArrayCollection([]));
 
         $this->expectException(NoContactsFoundException::class);
 
@@ -86,7 +62,7 @@ class InactiveContactFinderTest extends \PHPUnit_Framework_TestCase
         $this->getContactFinder()->getContacts(1, new Event(), $limiter);
     }
 
-    public function testContactsAreFoundAndStoredInCampaignMemberDatesAdded()
+    public function testContactsAreFoundAndStoredInCampaignMemberDatesAdded(): void
     {
         $contactMemberDates = [
             1 => new \DateTime(),
@@ -116,7 +92,6 @@ class InactiveContactFinderTest extends \PHPUnit_Framework_TestCase
     {
         return new InactiveContactFinder(
             $this->leadRepository,
-            $this->campaignRepository,
             $this->campaignLeadRepository,
             new NullLogger()
         );

@@ -1,68 +1,39 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Form\Type;
 
+use Mautic\CoreBundle\Helper\ArrayHelper;
+use Mautic\CoreBundle\Translation\Translator;
 use Mautic\LeadBundle\Helper\FormFieldHelper;
 use Mautic\LeadBundle\Model\FieldModel;
 use Mautic\LeadBundle\Model\LeadModel;
+use Mautic\LeadBundle\Segment\OperatorOptions;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\CallbackTransformer;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
-use Symfony\Component\Translation\TranslatorInterface;
 use Symfony\Component\Validator\Constraints\NotBlank;
 
 /**
- * Class CampaignEventLeadFieldValueType.
+ * @extends AbstractType<mixed>
  */
 class CampaignEventLeadFieldValueType extends AbstractType
 {
-    /**
-     * @var TranslatorInterface
-     */
-    protected $translator;
-
-    /**
-     * @var LeadModel
-     */
-    protected $leadModel;
-
-    /**
-     * @var FieldModel
-     */
-    protected $fieldModel;
-
-    /**
-     * CampaignEventLeadFieldValueType constructor.
-     *
-     * @param TranslatorInterface $translator
-     * @param LeadModel           $leadModel
-     * @param FieldModel          $fieldModel
-     */
-    public function __construct(TranslatorInterface $translator, LeadModel $leadModel, FieldModel $fieldModel)
-    {
-        $this->translator = $translator;
-        $this->leadModel  = $leadModel;
-        $this->fieldModel = $fieldModel;
+    public function __construct(
+        protected Translator $translator,
+        protected LeadModel $leadModel,
+        protected FieldModel $fieldModel,
+    ) {
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add(
             'field',
-            'leadfields_choices',
+            LeadFieldsType::class,
             [
                 'label'                 => 'mautic.lead.campaign.event.field',
                 'label_attr'            => ['class' => 'control-label'],
@@ -70,7 +41,7 @@ class CampaignEventLeadFieldValueType extends AbstractType
                 'with_company_fields'   => true,
                 'with_tags'             => true,
                 'with_utm'              => true,
-                'empty_value'           => 'mautic.core.select',
+                'placeholder'           => 'mautic.core.select',
                 'attr'                  => [
                     'class'    => 'form-control',
                     'tooltip'  => 'mautic.lead.campaign.event.field_descr',
@@ -86,7 +57,7 @@ class CampaignEventLeadFieldValueType extends AbstractType
         );
 
         // function to add 'template' choice field dynamically
-        $func = function (FormEvent $e) {
+        $func = function (FormEvent $e): void {
             $data = $e->getData();
             $form = $e->getForm();
 
@@ -105,7 +76,7 @@ class CampaignEventLeadFieldValueType extends AbstractType
                     if (!empty($properties['list'])) {
                         // Lookup/Select options
                         $fieldValues = FormFieldHelper::parseList($properties['list']);
-                    } elseif (!empty($properties) && $fieldType == 'boolean') {
+                    } elseif (!empty($properties) && 'boolean' == $fieldType) {
                         // Boolean options
                         $fieldValues = [
                             0 => $properties['no'],
@@ -117,13 +88,14 @@ class CampaignEventLeadFieldValueType extends AbstractType
                                 $fieldValues = FormFieldHelper::getCountryChoices();
                                 break;
                             case 'region':
-                                $fieldValues = FormFieldHelper::getRegionChoices();
+                                $fieldValues = ArrayHelper::flatten(FormFieldHelper::getRegionChoices());
                                 break;
                             case 'timezone':
-                                $fieldValues = FormFieldHelper::getTimezonesChoices();
+                                $fieldValues = ArrayHelper::flatten(FormFieldHelper::getTimezonesChoices());
                                 break;
                             case 'locale':
-                                $fieldValues = FormFieldHelper::getLocaleChoices();
+                                // Locales are flipped. And yes, we will flip the array again below.
+                                $fieldValues = array_flip(FormFieldHelper::getLocaleChoices());
                                 break;
                             case 'date':
                             case 'datetime':
@@ -140,7 +112,7 @@ class CampaignEventLeadFieldValueType extends AbstractType
                                         $fieldValues
                                     );
 
-                                    $choiceAttr = function ($value, $key, $index) use ($customValue) {
+                                    $choiceAttr = function ($value, $key, $index) use ($customValue): array {
                                         if ($customValue === $value) {
                                             return ['data-custom' => 1];
                                         }
@@ -166,28 +138,40 @@ class CampaignEventLeadFieldValueType extends AbstractType
 
             // Display selectbox for a field with choices, textbox for others
             if (!empty($fieldValues) && $supportsChoices) {
-                $form->add(
-                    'value',
-                    'choice',
-                    [
-                        'choices'    => $fieldValues,
-                        'label'      => 'mautic.form.field.form.value',
-                        'label_attr' => ['class' => 'control-label'],
-                        'attr'       => [
-                            'class'                => 'form-control',
-                            'onchange'             => 'Mautic.updateLeadFieldValueOptions(this)',
-                            'data-toggle'          => $fieldType,
-                            'data-onload-callback' => 'updateLeadFieldValueOptions',
-                        ],
-                        'choice_attr' => $choiceAttr,
-                        'required'    => true,
-                        'constraints' => [
-                            new NotBlank(
-                                ['message' => 'mautic.core.value.required']
-                            ),
-                        ],
-                    ]
-                );
+                $isMultiple   = in_array($operator, [OperatorOptions::INCLUDING_ANY, OperatorOptions::EXCLUDING_ANY]);
+                $value        = $isMultiple && !is_array($data['value']) ? [$data['value']] : $data['value'];
+                $innerBuilder = $form->getConfig()->getFormFactory()->createNamedBuilder('value', ChoiceType::class, null, [
+                    'choices'    => array_flip($fieldValues),
+                    'label'      => 'mautic.form.field.form.value',
+                    'multiple'   => $isMultiple,
+                    'label_attr' => ['class' => 'control-label'],
+                    'attr'       => [
+                        'class'                => 'form-control',
+                        'onchange'             => 'Mautic.updateLeadFieldValueOptions(this)',
+                        'data-toggle'          => $fieldType,
+                        'data-onload-callback' => 'updateLeadFieldValueOptions',
+                    ],
+                    'choice_attr' => $choiceAttr,
+                    'required'    => true,
+                    'constraints' => [
+                        new NotBlank(
+                            ['message' => 'mautic.core.value.required']
+                        ),
+                    ],
+                    'auto_initialize' => false,
+                    'data'            => $value,
+                ]);
+
+                $transform = function ($value) use ($isMultiple) {
+                    if ($isMultiple) {
+                        return !is_array($value) ? (array) $value : $value;
+                    }
+
+                    return is_array($value) ? reset($value) : $value;
+                };
+                $innerBuilder->addModelTransformer(new CallbackTransformer($transform, $transform));
+
+                $form->add($innerBuilder->getForm());
             } else {
                 $attr = [
                     'class'                => 'form-control',
@@ -201,7 +185,7 @@ class CampaignEventLeadFieldValueType extends AbstractType
 
                 $form->add(
                     'value',
-                    'text',
+                    TextType::class,
                     [
                         'label'       => 'mautic.form.field.form.value',
                         'label_attr'  => ['class' => 'control-label'],
@@ -217,14 +201,14 @@ class CampaignEventLeadFieldValueType extends AbstractType
 
             $form->add(
                 'operator',
-                'choice',
+                ChoiceType::class,
                 [
-                    'label'      => 'mautic.lead.lead.submitaction.operator',
-                    'label_attr' => ['class' => 'control-label'],
-                    'attr'       => [
+                    'choices'           => $this->leadModel->getOperatorsForFieldType(null == $fieldType ? 'default' : $fieldType, ['date']),
+                    'label'             => 'mautic.lead.lead.submitaction.operator',
+                    'label_attr'        => ['class' => 'control-label'],
+                    'attr'              => [
                         'onchange' => 'Mautic.updateLeadFieldValues(this)',
                     ],
-                    'choices' => $this->leadModel->getOperatorsForFieldType(null == $fieldType ? 'default' : $fieldType, ['date']),
                 ]
             );
         };
@@ -234,10 +218,7 @@ class CampaignEventLeadFieldValueType extends AbstractType
         $builder->addEventListener(FormEvents::PRE_SUBMIT, $func);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getBlockPrefix(): string
     {
         return 'campaignevent_lead_field_value';
     }

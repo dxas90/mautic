@@ -1,16 +1,8 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Deduplicate;
 
+use Mautic\CoreBundle\Helper\ArrayHelper;
 use Mautic\LeadBundle\Deduplicate\Exception\SameContactException;
 use Mautic\LeadBundle\Deduplicate\Exception\ValueNotMergeableException;
 use Mautic\LeadBundle\Deduplicate\Helper\MergeValueHelper;
@@ -35,51 +27,18 @@ class ContactMerger
      */
     protected $loser;
 
-    /**
-     * @var LeadModel
-     */
-    protected $leadModel;
-
-    /**
-     * @var MergeRecordRepository
-     */
-    protected $repo;
-
-    /**
-     * @var LoggerInterface
-     */
-    protected $logger;
-
-    /**
-     * @var EventDispatcherInterface
-     */
-    protected $dispatcher;
-
-    /**
-     * ContactMerger constructor.
-     *
-     * @param LeadModel                $leadModel
-     * @param MergeRecordRepository    $repo
-     * @param EventDispatcherInterface $dispatcher
-     * @param LoggerInterface          $logger
-     */
-    public function __construct(LeadModel $leadModel, MergeRecordRepository $repo, EventDispatcherInterface $dispatcher, LoggerInterface $logger)
-    {
-        $this->leadModel  = $leadModel;
-        $this->repo       = $repo;
-        $this->logger     = $logger;
-        $this->dispatcher = $dispatcher;
+    public function __construct(
+        protected LeadModel $leadModel,
+        protected MergeRecordRepository $repo,
+        protected EventDispatcherInterface $dispatcher,
+        protected LoggerInterface $logger,
+    ) {
     }
 
     /**
-     * @param Lead $winner
-     * @param Lead $loser
-     *
-     * @return Lead
-     *
      * @throws SameContactException
      */
-    public function merge(Lead $winner, Lead $loser)
+    public function merge(Lead $winner, Lead $loser): Lead
     {
         if ($winner->getId() === $loser->getId()) {
             throw new SameContactException();
@@ -89,7 +48,7 @@ class ContactMerger
 
         // Dispatch pre merge event
         $event = new LeadMergeEvent($winner, $loser);
-        $this->dispatcher->dispatch(LeadEvents::LEAD_PRE_MERGE, $event);
+        $this->dispatcher->dispatch($event, LeadEvents::LEAD_PRE_MERGE);
 
         // Merge everything
         $this->updateMergeRecords($winner, $loser)
@@ -104,7 +63,7 @@ class ContactMerger
         $this->leadModel->saveEntity($winner, false);
 
         // Dispatch post merge event
-        $this->dispatcher->dispatch(LeadEvents::LEAD_POST_MERGE, $event);
+        $this->dispatcher->dispatch($event, LeadEvents::LEAD_POST_MERGE);
 
         // Delete the loser
         $this->leadModel->deleteEntity($loser);
@@ -114,9 +73,6 @@ class ContactMerger
 
     /**
      * Merge timestamps.
-     *
-     * @param Lead $winner
-     * @param Lead $loser
      *
      * @return $this
      */
@@ -133,7 +89,7 @@ class ContactMerger
          * Alternatively, if the winner's date identified is null,
          * use the loser's date identified (doesn't matter if it is null).
          */
-        if (($loser->getDateIdentified() !== null && $loser->getDateIdentified() < $winner->getDateIdentified()) || $winner->getDateIdentified() === null) {
+        if ((null !== $loser->getDateIdentified() && $loser->getDateIdentified() < $winner->getDateIdentified()) || null === $winner->getDateIdentified()) {
             $winner->setDateIdentified($loser->getDateIdentified());
         }
 
@@ -142,9 +98,6 @@ class ContactMerger
 
     /**
      * Merge IP history into the winner.
-     *
-     * @param Lead $winner
-     * @param Lead $loser
      *
      * @return $this
      */
@@ -164,16 +117,13 @@ class ContactMerger
     /**
      * Merge custom field data into winner.
      *
-     * @param Lead $winner
-     * @param Lead $loser
-     *
      * @return $this
      */
     public function mergeFieldData(Lead $winner, Lead $loser)
     {
         // Use the modified date if applicable or date added if the contact has never been edited
-        $loserDate  = ($loser->getDateModified()) ? $loser->getDateModified() : $loser->getDateAdded();
-        $winnerDate = ($winner->getDateModified()) ? $winner->getDateModified() : $winner->getDateAdded();
+        $loserDate  = $loser->getDateModified() ?: $loser->getDateAdded();
+        $winnerDate = $winner->getDateModified() ?: $winner->getDateAdded();
 
         // When it comes to data, keep the newest value regardless of the winner/loser
         $newest = ($loserDate > $winnerDate) ? $loser : $winner;
@@ -198,13 +148,26 @@ class ContactMerger
             }
 
             try {
-                $newValue = MergeValueHelper::getMergeValue($newestFields[$field], $oldestFields[$field], $winner->getFieldValue($field));
+                $fromValue    = empty($oldestFields[$field]) ? 'empty' : $oldestFields[$field];
+                $fieldDetails = $winner->getField($field);
+
+                if (false === $fieldDetails) {
+                    throw new ValueNotMergeableException($fromValue, false);
+                }
+
+                $defaultValue = ArrayHelper::getValue('default_value', $fieldDetails);
+                $newValue     = MergeValueHelper::getMergeValue(
+                    $newestFields[$field],
+                    $oldestFields[$field],
+                    $winner->getFieldValue($field),
+                    $defaultValue,
+                    $newest->isAnonymous()
+                );
                 $winner->addUpdatedField($field, $newValue);
 
-                $fromValue = empty($oldestFields[$field]) ? 'empty' : $oldestFields[$field];
-                $this->logger->debug("CONTACT: Updated $field from $fromValue to $newValue for {$winner->getId()}");
+                $this->logger->debug("CONTACT: Updated {$field} from {$fromValue} to {$newValue} for {$winner->getId()}");
             } catch (ValueNotMergeableException $exception) {
-                $this->logger->info("CONTACT: $field is not mergeable for {$winner->getId()} - ".$exception->getMessage());
+                $this->logger->info("CONTACT: {$field} is not mergeable for {$winner->getId()} - {$exception->getMessage()}");
             }
         }
 
@@ -214,9 +177,6 @@ class ContactMerger
     /**
      * Merge owners if the winner isn't already assigned an owner.
      *
-     * @param Lead $winner
-     * @param Lead $loser
-     *
      * @return $this
      */
     public function mergeOwners(Lead $winner, Lead $loser)
@@ -224,7 +184,7 @@ class ContactMerger
         $oldOwner = $winner->getOwner();
         $newOwner = $loser->getOwner();
 
-        if ($oldOwner === null && $newOwner !== null) {
+        if (null === $oldOwner && null !== $newOwner) {
             $winner->setOwner($newOwner);
 
             $this->logger->debug("CONTACT: New owner of {$winner->getId()} is {$newOwner->getId()}");
@@ -235,9 +195,6 @@ class ContactMerger
 
     /**
      * Sum points from both contacts.
-     *
-     * @param Lead $winner
-     * @param Lead $loser
      *
      * @return $this
      */
@@ -258,9 +215,6 @@ class ContactMerger
     /**
      * Merge tags from loser into winner.
      *
-     * @param Lead $winner
-     * @param Lead $loser
-     *
      * @return $this
      */
     public function mergeTags(Lead $winner, Lead $loser)
@@ -275,9 +229,6 @@ class ContactMerger
 
     /**
      * Merge past merge records into the winner.
-     *
-     * @param Lead $winner
-     * @param Lead $loser
      *
      * @return $this
      */
@@ -294,7 +245,6 @@ class ContactMerger
             ->setMergedId($loser->getId());
 
         $this->repo->saveEntity($mergeRecord);
-        $this->repo->clear();
 
         return $this;
     }

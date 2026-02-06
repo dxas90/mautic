@@ -1,18 +1,9 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\PageBundle\EventListener;
 
 use Mautic\CoreBundle\EventListener\ChannelTrait;
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
+use Mautic\CoreBundle\Factory\ModelFactory;
 use Mautic\LeadBundle\Event\LeadChangeEvent;
 use Mautic\LeadBundle\Event\LeadMergeEvent;
 use Mautic\LeadBundle\Event\LeadTimelineEvent;
@@ -20,40 +11,28 @@ use Mautic\LeadBundle\LeadEvents;
 use Mautic\LeadBundle\Model\ChannelTimelineInterface;
 use Mautic\PageBundle\Model\PageModel;
 use Mautic\PageBundle\Model\VideoModel;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\Routing\RouterInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
-/**
- * Class LeadSubscriber.
- */
-class LeadSubscriber extends CommonSubscriber
+class LeadSubscriber implements EventSubscriberInterface
 {
     use ChannelTrait;
 
     /**
-     * @var PageModel
+     * @param ModelFactory<object> $modelFactory
      */
-    protected $pageModel;
-
-    /**
-     * @var VideoModel
-     */
-    protected $pageVideoModel;
-
-    /**
-     * LeadSubscriber constructor.
-     *
-     * @param PageModel  $pageModel
-     * @param VideoModel $pageVideoModel
-     */
-    public function __construct(PageModel $pageModel, VideoModel $pageVideoModel)
-    {
-        $this->pageModel      = $pageModel;
-        $this->pageVideoModel = $pageVideoModel;
+    public function __construct(
+        private PageModel $pageModel,
+        private VideoModel $pageVideoModel,
+        private TranslatorInterface $translator,
+        private RouterInterface $router,
+        ModelFactory $modelFactory,
+    ) {
+        $this->setModelFactory($modelFactory);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             LeadEvents::TIMELINE_ON_GENERATE => [
@@ -67,24 +46,23 @@ class LeadSubscriber extends CommonSubscriber
 
     /**
      * Compile events for the lead timeline.
-     *
-     * @param LeadTimelineEvent $event
      */
-    public function onTimelineGenerate(LeadTimelineEvent $event)
+    public function onTimelineGenerate(LeadTimelineEvent $event): void
     {
         // Set available event types
         $eventTypeKey  = 'page.hit';
         $eventTypeName = $this->translator->trans('mautic.page.event.hit');
         $event->addEventType($eventTypeKey, $eventTypeName);
-        $event->addSerializerGroup('pageList', 'hitDetails');
+        $event->addSerializerGroup(['pageList', 'hitDetails']);
 
         if (!$event->isApplicable($eventTypeKey)) {
             return;
         }
 
-        /** @var \Mautic\PageBundle\Entity\HitRepository $hitRepository */
-        $hitRepository = $this->em->getRepository('MauticPageBundle:Hit');
-        $hits          = $hitRepository->getLeadHits($event->getLeadId(), $event->getQueryOptions());
+        $hits = $this->pageModel->getHitRepository()->getLeadHits(
+            $event->getLeadId(),
+            $event->getQueryOptions()
+        );
 
         // Add to counter
         $event->addToCounter($eventTypeKey, $hits);
@@ -92,8 +70,8 @@ class LeadSubscriber extends CommonSubscriber
         if (!$event->isEngagementCount()) {
             // Add the hits to the event array
             foreach ($hits['results'] as $hit) {
-                $template = 'MauticPageBundle:SubscribedEvents\Timeline:index.html.php';
-                $icon     = 'fa-link';
+                $template = '@MauticPage/SubscribedEvents/Timeline/index.html.twig';
+                $icon     = 'ri-link';
 
                 if (!empty($hit['source'])) {
                     if ($channelModel = $this->getChannelModel($hit['source'])) {
@@ -110,19 +88,6 @@ class LeadSubscriber extends CommonSubscriber
                                 $icon = $overrideIcon;
                             }
                         }
-
-                        /* @deprecated - BC support to be removed in 3.0 */
-                        // Allow a custom template if applicable
-                        if (method_exists($channelModel, 'getPageHitLeadTimelineTemplate')) {
-                            $template = $channelModel->getPageHitLeadTimelineTemplate($hit);
-                        }
-                        if (method_exists($channelModel, 'getPageHitLeadTimelineLabel')) {
-                            $eventTypeName = $channelModel->getPageHitLeadTimelineLabel($hit);
-                        }
-                        if (method_exists($channelModel, 'getPageHitLeadTimelineIcon')) {
-                            $icon = $channelModel->getPageHitLeadTimelineIcon($hit);
-                        }
-                        /* end deprecation */
 
                         if (!empty($hit['sourceId'])) {
                             if ($source = $this->getChannelEntityName($hit['source'], $hit['sourceId'], true)) {
@@ -141,7 +106,7 @@ class LeadSubscriber extends CommonSubscriber
                     ];
                 } else {
                     $eventLabel = [
-                        'label'      => (isset($hit['urlTitle'])) ? $hit['urlTitle'] : $hit['url'],
+                        'label'      => $hit['urlTitle'] ?? $hit['url'],
                         'href'       => $hit['url'],
                         'isExternal' => true,
                     ];
@@ -171,32 +136,30 @@ class LeadSubscriber extends CommonSubscriber
 
     /**
      * Compile events for the lead timeline.
-     *
-     * @param LeadTimelineEvent $event
      */
-    public function onTimelineGenerateVideo(LeadTimelineEvent $event)
+    public function onTimelineGenerateVideo(LeadTimelineEvent $event): void
     {
         // Set available event types
         $eventTypeKey  = 'page.videohit';
         $eventTypeName = $this->translator->trans('mautic.page.event.videohit');
         $event->addEventType($eventTypeKey, $eventTypeName);
-        $event->addSerializerGroup('pageList', 'hitDetails');
+        $event->addSerializerGroup(['pageList', 'hitDetails']);
 
         if (!$event->isApplicable($eventTypeKey)) {
             return;
         }
 
-        /** @var \Mautic\PageBundle\Entity\VideoHitRepository $hitRepository */
-        $hitRepository = $this->em->getRepository('MauticPageBundle:VideoHit');
-
-        $hits = $hitRepository->getTimelineStats($event->getLeadId(), $event->getQueryOptions());
+        $hits = $this->pageVideoModel->getHitRepository()->getTimelineStats(
+            $event->getLeadId(),
+            $event->getQueryOptions()
+        );
 
         $event->addToCounter($eventTypeKey, $hits);
 
         if (!$event->isEngagementCount()) {
             // Add the hits to the event array
             foreach ($hits['results'] as $hit) {
-                $template   = 'MauticPageBundle:SubscribedEvents\Timeline:videohit.html.php';
+                $template   = '@MauticPage/SubscribedEvents/Timeline/videohit.html.twig';
                 $eventLabel = $eventTypeName;
 
                 $event->addEvent(
@@ -209,17 +172,14 @@ class LeadSubscriber extends CommonSubscriber
                             'hit' => $hit,
                         ],
                         'contentTemplate' => $template,
-                        'icon'            => 'fa-video-camera',
+                        'icon'            => 'ri-vidicon-2-line',
                     ]
                 );
             }
         }
     }
 
-    /**
-     * @param LeadChangeEvent $event
-     */
-    public function onLeadChange(LeadChangeEvent $event)
+    public function onLeadChange(LeadChangeEvent $event): void
     {
         $this->pageModel->getHitRepository()->updateLeadByTrackingId(
             $event->getNewLead()->getId(),
@@ -228,10 +188,7 @@ class LeadSubscriber extends CommonSubscriber
         );
     }
 
-    /**
-     * @param LeadMergeEvent $event
-     */
-    public function onLeadMerge(LeadMergeEvent $event)
+    public function onLeadMerge(LeadMergeEvent $event): void
     {
         $this->pageModel->getHitRepository()->updateLead(
             $event->getLoser()->getId(),

@@ -1,49 +1,34 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
+declare(strict_types=1);
 
 namespace Mautic\LeadBundle\Form\Type;
 
 use Mautic\CategoryBundle\Model\CategoryModel;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\OptionsResolver\Options;
-use Symfony\Component\OptionsResolver\OptionsResolverInterface;
+use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
- * Class LeadCategoryType.
+ * @extends AbstractType<mixed>
  */
 class LeadCategoryType extends AbstractType
 {
-    private $categoryModel;
-
-    /**
-     * @param CategoryModel $categoryModel
-     */
-    public function __construct(CategoryModel $categoryModel)
-    {
-        $this->categoryModel = $categoryModel;
+    public function __construct(
+        private CategoryModel $categoryModel,
+    ) {
     }
 
-    /**
-     * @param OptionsResolverInterface $resolver
-     */
-    public function setDefaultOptions(OptionsResolverInterface $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
-        $model = $this->categoryModel;
         $resolver->setDefaults([
-            'choices' => function (Options $options) use ($model) {
-                $categories = $model->getLookupResults('global');
+            'choices'           => function (Options $options): array {
+                $categories = $this->categoryModel->getLookupResults('email', '', 0);
+                $choices    = [];
 
-                $choices = [];
                 foreach ($categories as $cat) {
-                    $choices[$cat['id']] = $cat['title'];
+                    $choices[$cat['title']] = $cat['id'];
                 }
 
                 return $choices;
@@ -53,18 +38,12 @@ class LeadCategoryType extends AbstractType
         ]);
     }
 
-    /**
-     * @return null|string|\Symfony\Component\Form\FormTypeInterface
-     */
-    public function getParent()
+    public function getParent(): ?string
     {
-        return 'choice';
+        return ChoiceType::class;
     }
 
-    /**
-     * @return string
-     */
-    public function getName()
+    public function getBlockPrefix(): string
     {
         return 'leadcategory_choices';
     }

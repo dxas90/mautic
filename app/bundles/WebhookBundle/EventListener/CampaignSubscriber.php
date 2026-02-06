@@ -1,42 +1,23 @@
 <?php
 
-/*
- * @copyright   2014 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\WebhookBundle\EventListener;
 
 use Mautic\CampaignBundle\CampaignEvents;
 use Mautic\CampaignBundle\Event as Events;
 use Mautic\CampaignBundle\Event\CampaignExecutionEvent;
-use Mautic\CoreBundle\EventListener\CommonSubscriber;
+use Mautic\WebhookBundle\Form\Type\CampaignEventSendWebhookType;
 use Mautic\WebhookBundle\Helper\CampaignHelper;
 use Mautic\WebhookBundle\WebhookEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
-class CampaignSubscriber extends CommonSubscriber
+class CampaignSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var CampaignHelper
-     */
-    protected $campaignHelper;
-
-    /**
-     * @param CampaignHelper $campaignHelper
-     */
-    public function __construct(CampaignHelper $campaignHelper)
-    {
-        $this->campaignHelper = $campaignHelper;
+    public function __construct(
+        private CampaignHelper $campaignHelper,
+    ) {
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             CampaignEvents::CAMPAIGN_ON_BUILD         => ['onCampaignBuild', 0],
@@ -44,12 +25,7 @@ class CampaignSubscriber extends CommonSubscriber
         ];
     }
 
-    /**
-     * @param CampaignExecutionEvent $event
-     *
-     * @return CampaignExecutionEvent
-     */
-    public function onCampaignTriggerAction(CampaignExecutionEvent $event)
+    public function onCampaignTriggerAction(CampaignExecutionEvent $event): void
     {
         if ($event->checkContext('campaign.sendwebhook')) {
             try {
@@ -63,16 +39,15 @@ class CampaignSubscriber extends CommonSubscriber
 
     /**
      * Add event triggers and actions.
-     *
-     * @param Events\CampaignBuilderEvent $event
      */
-    public function onCampaignBuild(Events\CampaignBuilderEvent $event)
+    public function onCampaignBuild(Events\CampaignBuilderEvent $event): void
     {
         $sendWebhookAction = [
-            'label'       => 'mautic.webhook.event.sendwebhook',
-            'description' => 'mautic.webhook.event.sendwebhook_desc',
-            'formType'    => 'campaignevent_sendwebhook',
-            'eventName'   => WebhookEvents::ON_CAMPAIGN_TRIGGER_ACTION,
+            'label'              => 'mautic.webhook.event.sendwebhook',
+            'description'        => 'mautic.webhook.event.sendwebhook_desc',
+            'formType'           => CampaignEventSendWebhookType::class,
+            'formTypeCleanMasks' => 'clean',
+            'eventName'          => WebhookEvents::ON_CAMPAIGN_TRIGGER_ACTION,
         ];
         $event->addAction('campaign.sendwebhook', $sendWebhookAction);
     }

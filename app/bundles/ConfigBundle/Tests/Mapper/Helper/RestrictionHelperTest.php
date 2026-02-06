@@ -1,19 +1,11 @@
 <?php
 
-/*
- * @copyright   2017 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ConfigBundle\Tests\Mapper\Helper;
 
 use Mautic\ConfigBundle\Mapper\Helper\RestrictionHelper;
 
-class RestrictionHelperTest extends \PHPUnit_Framework_TestCase
+#[\PHPUnit\Framework\Attributes\CoversClass(RestrictionHelper::class)]
+class RestrictionHelperTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * @var array
@@ -29,12 +21,8 @@ class RestrictionHelperTest extends \PHPUnit_Framework_TestCase
         ],
     ];
 
-    /**
-     * @testdox Ensure a mixed numeric/string keyed array is formatted to all string based keys
-     *
-     * @covers  \Mautic\ConfigBundle\Mapper\Helper\RestrictionHelper::prepareRestrictions()
-     */
-    public function testRestrictedConfigArrayIsFormattedCorrectly()
+    #[\PHPUnit\Framework\Attributes\TestDox('Ensure a mixed numeric/string keyed array is formatted to all string based keys')]
+    public function testRestrictedConfigArrayIsFormattedCorrectly(): void
     {
         $expected = [
             'db_host'         => 'db_host',
@@ -50,12 +38,8 @@ class RestrictionHelperTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals($expected, RestrictionHelper::prepareRestrictions($this->restrictedFields));
     }
 
-    /**
-     * @testdox Ensure a restrictions are recursively applied
-     * @covers  \Mautic\ConfigBundle\Mapper\Helper\RestrictionHelper::prepareRestrictions()
-     * @covers  \Mautic\ConfigBundle\Mapper\Helper\RestrictionHelper::applyRestrictions()
-     */
-    public function testApplyingRestrictionsToConfigArray()
+    #[\PHPUnit\Framework\Attributes\TestDox('Ensure a restrictions are recursively applied')]
+    public function testApplyingRestrictionsToConfigArray(): void
     {
         $config = [
             'db_host'         => 'dbhost',

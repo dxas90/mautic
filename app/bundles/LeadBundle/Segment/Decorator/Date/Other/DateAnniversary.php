@@ -1,16 +1,8 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic
- *
- * @link        http://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\Segment\Decorator\Date\Other;
 
+use Doctrine\DBAL\Query\Expression\CompositeExpression;
 use Mautic\LeadBundle\Segment\ContactSegmentFilterCrate;
 use Mautic\LeadBundle\Segment\Decorator\Date\DateOptionParameters;
 use Mautic\LeadBundle\Segment\Decorator\DateDecorator;
@@ -18,59 +10,32 @@ use Mautic\LeadBundle\Segment\Decorator\FilterDecoratorInterface;
 
 class DateAnniversary implements FilterDecoratorInterface
 {
-    /**
-     * @var DateDecorator
-     */
-    private $dateDecorator;
-
-    /**
-     * @var DateOptionParameters
-     */
-    private $dateOptionParameters;
-
-    /**
-     * @param DateDecorator        $dateDecorator
-     * @param DateOptionParameters $dateOptionParameters
-     */
-    public function __construct(DateDecorator $dateDecorator, DateOptionParameters $dateOptionParameters)
-    {
-        $this->dateDecorator        = $dateDecorator;
-        $this->dateOptionParameters = $dateOptionParameters;
+    public function __construct(
+        private DateDecorator $dateDecorator,
+        private DateOptionParameters $dateOptionParameters,
+    ) {
     }
 
     /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return null|string
+     * @return string|null
      */
     public function getField(ContactSegmentFilterCrate $contactSegmentFilterCrate)
     {
         return $this->dateDecorator->getField($contactSegmentFilterCrate);
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return string
-     */
-    public function getTable(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getTable(ContactSegmentFilterCrate $contactSegmentFilterCrate): string
     {
         return $this->dateDecorator->getTable($contactSegmentFilterCrate);
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return string
-     */
-    public function getOperator(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getOperator(ContactSegmentFilterCrate $contactSegmentFilterCrate): string
     {
         return 'like';
     }
 
     /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     * @param array|string              $argument
+     * @param array|string $argument
      *
      * @return array|string
      */
@@ -80,43 +45,32 @@ class DateAnniversary implements FilterDecoratorInterface
     }
 
     /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return array|bool|float|null|string
+     * @return array|bool|float|string|null
      */
-    public function getParameterValue(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getParameterValue(ContactSegmentFilterCrate $contactSegmentFilterCrate): mixed
     {
-        $dateTimeHelper = $this->dateOptionParameters->getDefaultDate();
+        $date           = $this->dateOptionParameters->getDefaultDate();
+        $filter         = $contactSegmentFilterCrate->getFilter();
+        $relativeFilter = is_string($filter) ? trim(str_replace(['anniversary', 'birthday'], '', $filter)) : $filter;
 
-        return $dateTimeHelper->toLocalString('%-m-d');
+        if ($relativeFilter) {
+            $date->modify($relativeFilter);
+        }
+
+        return $date->toLocalString('%-m-d%');
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return string
-     */
-    public function getQueryType(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getQueryType(ContactSegmentFilterCrate $contactSegmentFilterCrate): string
     {
         return $this->dateDecorator->getQueryType($contactSegmentFilterCrate);
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return bool|string
-     */
-    public function getAggregateFunc(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getAggregateFunc(ContactSegmentFilterCrate $contactSegmentFilterCrate): string|bool
     {
         return $this->dateDecorator->getAggregateFunc($contactSegmentFilterCrate);
     }
 
-    /**
-     * @param ContactSegmentFilterCrate $contactSegmentFilterCrate
-     *
-     * @return \Mautic\LeadBundle\Segment\Query\Expression\CompositeExpression|null|string
-     */
-    public function getWhere(ContactSegmentFilterCrate $contactSegmentFilterCrate)
+    public function getWhere(ContactSegmentFilterCrate $contactSegmentFilterCrate): CompositeExpression|string|null
     {
         return $this->dateDecorator->getWhere($contactSegmentFilterCrate);
     }

@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\LeadBundle\EventListener;
 
 use Mautic\CampaignBundle\CampaignEvents;
@@ -21,32 +12,13 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 class CampaignActionDeleteContactSubscriber implements EventSubscriberInterface
 {
-    /**
-     * @var LeadModel
-     */
-    private $leadModel;
-
-    /**
-     * @var RemovedContactTracker
-     */
-    private $removedContactTracker;
-
-    /**
-     * CampaignActionDeleteContactSubscriber constructor.
-     *
-     * @param LeadModel             $leadModel
-     * @param RemovedContactTracker $removedContactTracker
-     */
-    public function __construct(LeadModel $leadModel, RemovedContactTracker $removedContactTracker)
-    {
-        $this->leadModel             = $leadModel;
-        $this->removedContactTracker = $removedContactTracker;
+    public function __construct(
+        private LeadModel $leadModel,
+        private RemovedContactTracker $removedContactTracker,
+    ) {
     }
 
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             CampaignEvents::CAMPAIGN_ON_BUILD             => ['configureAction', 0],
@@ -54,10 +26,7 @@ class CampaignActionDeleteContactSubscriber implements EventSubscriberInterface
         ];
     }
 
-    /**
-     * @param CampaignBuilderEvent $event
-     */
-    public function configureAction(CampaignBuilderEvent $event)
+    public function configureAction(CampaignBuilderEvent $event): void
     {
         $event->addAction(
             'lead.deletecontact',
@@ -78,10 +47,7 @@ class CampaignActionDeleteContactSubscriber implements EventSubscriberInterface
         );
     }
 
-    /**
-     * @param PendingEvent $event
-     */
-    public function deleteContacts(PendingEvent $event)
+    public function deleteContacts(PendingEvent $event): void
     {
         $contactIds = $event->getContactIds();
 

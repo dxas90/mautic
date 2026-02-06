@@ -1,15 +1,6 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
-namespace Mautic\SmsBundle\Tests\EventListener;
+namespace Mautic\EmailBundle\Tests\EventListener;
 
 use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Event\ContactIdentificationEvent;
@@ -18,26 +9,26 @@ use Mautic\SmsBundle\Entity\Stat;
 use Mautic\SmsBundle\Entity\StatRepository;
 use Mautic\SmsBundle\EventListener\TrackingSubscriber;
 
-class TrackingSubscriberTest extends \PHPUnit_Framework_TestCase
+class TrackingSubscriberTest extends \PHPUnit\Framework\TestCase
 {
     /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|StatRepository
+     * @var \PHPUnit\Framework\MockObject\MockObject|StatRepository
      */
-    private $statRepository;
+    private \PHPUnit\Framework\MockObject\MockObject $statRepository;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->statRepository = $this->createMock(StatRepository::class);
     }
 
-    public function testIdentifyContactByStat()
+    public function testIdentifyContactByStat(): void
     {
         $ct = [
-                'lead'    => 2,
-                'channel' => [
-                    'sms' => 1,
-                ],
-                'stat'    => 'abc123',
+            'lead'    => 2,
+            'channel' => [
+                'sms' => 1,
+            ],
+            'stat'    => 'abc123',
         ];
 
         $sms = $this->createMock(Sms::class);
@@ -64,7 +55,7 @@ class TrackingSubscriberTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals($lead->getId(), $event->getIdentifiedContact()->getId());
     }
 
-    public function testChannelMismatchDoesNotIdentify()
+    public function testChannelMismatchDoesNotIdentify(): void
     {
         $ct = [
             'lead'    => 2,
@@ -81,7 +72,7 @@ class TrackingSubscriberTest extends \PHPUnit_Framework_TestCase
         $this->assertNull($event->getIdentifiedContact());
     }
 
-    public function testChannelIdMismatchDoesNotIdentify()
+    public function testChannelIdMismatchDoesNotIdentify(): void
     {
         $ct = [
             'lead'    => 2,
@@ -115,7 +106,7 @@ class TrackingSubscriberTest extends \PHPUnit_Framework_TestCase
         $this->assertNull($event->getIdentifiedContact());
     }
 
-    public function testStatEmptyLeadDoesNotIdentify()
+    public function testStatEmptyLeadDoesNotIdentify(): void
     {
         $ct = [
             'lead'    => 2,

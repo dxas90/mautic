@@ -1,23 +1,14 @@
 <?php
 
-/*
- * @copyright   2016 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\ReportBundle\Tests\Entity;
 
 use Mautic\ReportBundle\Entity\Report;
 use Mautic\ReportBundle\Scheduler\Enum\SchedulerEnum;
 use Mautic\ReportBundle\Scheduler\Exception\ScheduleNotValidException;
 
-class ReportTest extends \PHPUnit_Framework_TestCase
+class ReportTest extends \PHPUnit\Framework\TestCase
 {
-    public function testNotScheduled()
+    public function testNotScheduled(): void
     {
         $report = $this->getInvalidReport();
 
@@ -30,7 +21,7 @@ class ReportTest extends \PHPUnit_Framework_TestCase
         $this->assertNull($report->getScheduleMonthFrequency());
     }
 
-    public function testDailyScheduled()
+    public function testDailyScheduled(): void
     {
         $report = $this->getInvalidReport();
 
@@ -43,7 +34,7 @@ class ReportTest extends \PHPUnit_Framework_TestCase
         $this->assertNull($report->getScheduleMonthFrequency());
     }
 
-    public function testWeeklyScheduled()
+    public function testWeeklyScheduled(): void
     {
         $report = $this->getInvalidReport();
         $report->setScheduleDay('WEEK_DAYS');
@@ -56,7 +47,7 @@ class ReportTest extends \PHPUnit_Framework_TestCase
         $this->assertNull($report->getScheduleMonthFrequency());
     }
 
-    public function testMonthlyScheduled()
+    public function testMonthlyScheduled(): void
     {
         $report = $this->getInvalidReport();
         $report->setScheduleDay('WEEK_DAYS');
@@ -70,7 +61,7 @@ class ReportTest extends \PHPUnit_Framework_TestCase
         $this->assertSame(SchedulerEnum::MONTH_FREQUENCY_LAST, $report->getScheduleMonthFrequency());
     }
 
-    public function testInvalidMonthlyScheduled()
+    public function testInvalidMonthlyScheduled(): void
     {
         $this->expectException(ScheduleNotValidException::class);
 
@@ -78,7 +69,7 @@ class ReportTest extends \PHPUnit_Framework_TestCase
         $report->ensureIsMonthlyScheduled();
     }
 
-    public function testInvalidWeeklyScheduled()
+    public function testInvalidWeeklyScheduled(): void
     {
         $this->expectException(ScheduleNotValidException::class);
 
@@ -86,7 +77,7 @@ class ReportTest extends \PHPUnit_Framework_TestCase
         $report->ensureIsWeeklyScheduled();
     }
 
-    public function testGetFilterValueIfFIltersAreEmpty()
+    public function testGetFilterValueIfFIltersAreEmpty(): void
     {
         $report = $this->getInvalidReport();
 
@@ -94,7 +85,7 @@ class ReportTest extends \PHPUnit_Framework_TestCase
         $this->assertSame('1234', $report->getFilterValue('e.test'));
     }
 
-    public function testGetFilterValueIfExists()
+    public function testGetFilterValueIfExists(): void
     {
         $report = $this->getInvalidReport();
         $report->setFilters([
@@ -107,7 +98,7 @@ class ReportTest extends \PHPUnit_Framework_TestCase
         $this->assertSame('1234', $report->getFilterValue('e.test'));
     }
 
-    public function testGetFilterValueIfDoesNotExist()
+    public function testGetFilterValueIfDoesNotExist(): void
     {
         $report = $this->getInvalidReport();
         $report->setFilters([
@@ -119,6 +110,28 @@ class ReportTest extends \PHPUnit_Framework_TestCase
 
         $this->expectException(\UnexpectedValueException::class);
         $report->getFilterValue('I need coffee');
+    }
+
+    public function testSetAsScheduledNow(): void
+    {
+        $email  = 'john@doe.email';
+        $report = new Report();
+        $report->setAsScheduledNow($email);
+
+        $this->assertTrue($report->isScheduled());
+        $this->assertSame($email, $report->getToAddress());
+        $this->assertSame(SchedulerEnum::UNIT_NOW, $report->getScheduleUnit());
+    }
+
+    public function testIsScheduledNowIfNot(): void
+    {
+        $report = new Report();
+
+        $this->assertFalse($report->isScheduledNow());
+
+        $report->setScheduleUnit(SchedulerEnum::UNIT_NOW);
+
+        $this->assertTrue($report->isScheduledNow());
     }
 
     /**

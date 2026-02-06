@@ -1,84 +1,61 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Tests\Executioner;
 
 use Doctrine\Common\Collections\ArrayCollection;
 use Mautic\CampaignBundle\Entity\Campaign;
 use Mautic\CampaignBundle\Entity\Event;
+use Mautic\CampaignBundle\Entity\LeadRepository;
 use Mautic\CampaignBundle\Executioner\ContactFinder\InactiveContactFinder;
 use Mautic\CampaignBundle\Executioner\ContactFinder\Limiter\ContactLimiter;
 use Mautic\CampaignBundle\Executioner\EventExecutioner;
+use Mautic\CampaignBundle\Executioner\Helper\EventRedirectionHelper;
 use Mautic\CampaignBundle\Executioner\Helper\InactiveHelper;
 use Mautic\CampaignBundle\Executioner\InactiveExecutioner;
 use Mautic\CampaignBundle\Executioner\Scheduler\EventScheduler;
+use Mautic\CoreBundle\ProcessSignal\ProcessSignalService;
 use Mautic\CoreBundle\Translation\Translator;
 use Mautic\LeadBundle\Entity\Lead;
+use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\NullLogger;
 use Symfony\Component\Console\Output\BufferedOutput;
 
-class InactiveExecutionerTest extends \PHPUnit_Framework_TestCase
+class InactiveExecutionerTest extends \PHPUnit\Framework\TestCase
 {
-    /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|InactiveContactFinder
-     */
-    private $inactiveContactFinder;
+    private MockObject&InactiveContactFinder $inactiveContactFinder;
 
-    /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|Translator
-     */
-    private $translator;
+    private MockObject&Translator $translator;
 
-    /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|EventScheduler
-     */
-    private $eventScheduler;
+    private MockObject&EventScheduler $eventScheduler;
 
-    /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|InactiveHelper
-     */
-    private $inactiveHelper;
+    private MockObject&InactiveHelper $inactiveHelper;
 
-    /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|EventExecutioner
-     */
-    private $eventExecutioner;
+    private MockObject&EventExecutioner $eventExecutioner;
 
-    protected function setUp()
+    private MockObject&EventRedirectionHelper $redirectionHelper;
+
+    protected function setUp(): void
     {
-        $this->inactiveContactFinder = $this->getMockBuilder(InactiveContactFinder::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->inactiveContactFinder = $this->createMock(InactiveContactFinder::class);
 
-        $this->translator = $this->getMockBuilder(Translator::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->translator = $this->createMock(Translator::class);
 
-        $this->eventScheduler = $this->getMockBuilder(EventScheduler::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->eventScheduler = $this->createMock(EventScheduler::class);
 
-        $this->inactiveHelper = $this->getMockBuilder(InactiveHelper::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->inactiveHelper = $this->createMock(InactiveHelper::class);
 
-        $this->eventExecutioner = $this->getMockBuilder(EventExecutioner::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->eventExecutioner = $this->createMock(EventExecutioner::class);
+
+        $this->redirectionHelper = $this->createMock(EventRedirectionHelper::class);
+
+        // Configure the redirection helper mock to return the event it receives
+        $this->redirectionHelper->method('handleEventRedirection')
+            ->willReturnCallback(fn (Event $event) => $event);
     }
 
-    public function testNoContactsFoundResultsInNothingExecuted()
+    public function testNoContactsFoundResultsInNothingExecuted(): void
     {
-        $campaign = $this->getMockBuilder(Campaign::class)
-            ->getMock();
+        $campaign = $this->createMock(Campaign::class);
         $campaign->expects($this->once())
             ->method('getEventsByType')
             ->willReturn(new ArrayCollection());
@@ -92,10 +69,9 @@ class InactiveExecutionerTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals(0, $counter->getEvaluated());
     }
 
-    public function testNoEventsFoundResultsInNothingExecuted()
+    public function testNoEventsFoundResultsInNothingExecuted(): void
     {
-        $campaign = $this->getMockBuilder(Campaign::class)
-            ->getMock();
+        $campaign = $this->createMock(Campaign::class);
         $campaign->expects($this->once())
             ->method('getEventsByType')
             ->willReturn(new ArrayCollection([new Event()]));
@@ -110,14 +86,16 @@ class InactiveExecutionerTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals(0, $counter->getTotalEvaluated());
     }
 
-    public function testNextBatchOfContactsAreExecuted()
+    public function testNextBatchOfContactsAreExecuted(): void
     {
         $decision = new Event();
-        $campaign = $this->getMockBuilder(Campaign::class)
-            ->getMock();
+        $campaign = $this->createMock(Campaign::class);
         $campaign->expects($this->once())
             ->method('getEventsByType')
             ->willReturn(new ArrayCollection([$decision]));
+        $campaign->expects($this->any())
+            ->method('getId')
+            ->willReturn(1);
 
         $limiter = new ContactLimiter(0, 0, 0, 0);
 
@@ -127,7 +105,7 @@ class InactiveExecutionerTest extends \PHPUnit_Framework_TestCase
 
         $this->inactiveContactFinder->expects($this->exactly(3))
             ->method('getContacts')
-            ->with(null, $decision, $limiter)
+            ->with(1, $decision, $limiter)
             ->willReturnOnConsecutiveCalls(
                 new ArrayCollection([3 => new Lead()]),
                 new ArrayCollection([10 => new Lead()]),
@@ -145,10 +123,9 @@ class InactiveExecutionerTest extends \PHPUnit_Framework_TestCase
         $this->getExecutioner()->execute($campaign, $limiter, new BufferedOutput());
     }
 
-    public function testValidationExecutesNothingIfCampaignUnpublished()
+    public function testValidationExecutesNothingIfCampaignUnpublished(): void
     {
-        $campaign = $this->getMockBuilder(Campaign::class)
-            ->getMock();
+        $campaign = $this->createMock(Campaign::class);
         $campaign->expects($this->once())
             ->method('isPublished')
             ->willReturn(false);
@@ -170,13 +147,15 @@ class InactiveExecutionerTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals(0, $counter->getTotalEvaluated());
     }
 
-    public function testValidationEvaluatesFoundEvents()
+    public function testValidationEvaluatesFoundEvents(): void
     {
-        $campaign = $this->getMockBuilder(Campaign::class)
-            ->getMock();
+        $campaign = $this->createMock(Campaign::class);
         $campaign->expects($this->once())
             ->method('isPublished')
             ->willReturn(true);
+        $campaign->expects($this->any())
+            ->method('getId')
+            ->willReturn(1);
 
         $decision = new Event();
         $decision->setCampaign($campaign);
@@ -194,7 +173,7 @@ class InactiveExecutionerTest extends \PHPUnit_Framework_TestCase
 
         $this->inactiveContactFinder->expects($this->exactly(3))
             ->method('getContacts')
-            ->with(null, $decision, $limiter)
+            ->with(1, $decision, $limiter)
             ->willReturnOnConsecutiveCalls(
                 new ArrayCollection([3 => new Lead()]),
                 new ArrayCollection([10 => new Lead()]),
@@ -220,7 +199,10 @@ class InactiveExecutionerTest extends \PHPUnit_Framework_TestCase
             $this->translator,
             $this->eventScheduler,
             $this->inactiveHelper,
-            $this->eventExecutioner
+            $this->eventExecutioner,
+            $this->createMock(ProcessSignalService::class),
+            $this->redirectionHelper,
+            $this->createMock(LeadRepository::class)
         );
     }
 }

@@ -1,14 +1,5 @@
 <?php
 
-/*
- * @copyright   2018 Mautic Contributors. All rights reserved
- * @author      Mautic, Inc.
- *
- * @link        https://mautic.org
- *
- * @license     GNU/GPLv3 http://www.gnu.org/licenses/gpl-3.0.html
- */
-
 namespace Mautic\CampaignBundle\Tests\Executioner\ContactFinder;
 
 use Doctrine\Common\Collections\ArrayCollection;
@@ -20,30 +11,26 @@ use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Entity\LeadRepository;
 use Psr\Log\NullLogger;
 
-class KickoffContactFinderTest extends \PHPUnit_Framework_TestCase
+class KickoffContactFinderTest extends \PHPUnit\Framework\TestCase
 {
     /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|LeadRepository
+     * @var \PHPUnit\Framework\MockObject\MockObject|LeadRepository
      */
-    private $leadRepository;
+    private \PHPUnit\Framework\MockObject\MockObject $leadRepository;
 
     /**
-     * @var \PHPUnit_Framework_MockObject_MockObject|CampaignRepository
+     * @var \PHPUnit\Framework\MockObject\MockObject|CampaignRepository
      */
-    private $campaignRepository;
+    private \PHPUnit\Framework\MockObject\MockObject $campaignRepository;
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->leadRepository = $this->getMockBuilder(LeadRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->leadRepository = $this->createMock(LeadRepository::class);
 
-        $this->campaignRepository = $this->getMockBuilder(CampaignRepository::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->campaignRepository = $this->createMock(CampaignRepository::class);
     }
 
-    public function testNoContactsFoundExceptionIsThrown()
+    public function testNoContactsFoundExceptionIsThrown(): void
     {
         $this->campaignRepository->expects($this->once())
             ->method('getPendingContactIds')
@@ -55,7 +42,7 @@ class KickoffContactFinderTest extends \PHPUnit_Framework_TestCase
         $this->getContactFinder()->getContacts(1, $limiter);
     }
 
-    public function testNoContactsFoundExceptionIsThrownIfEntitiesAreNotFound()
+    public function testNoContactsFoundExceptionIsThrownIfEntitiesAreNotFound(): void
     {
         $contactIds = [1, 2];
 
@@ -65,7 +52,7 @@ class KickoffContactFinderTest extends \PHPUnit_Framework_TestCase
 
         $this->leadRepository->expects($this->once())
             ->method('getContactCollection')
-            ->willReturn([]);
+            ->willReturn(new ArrayCollection([]));
 
         $this->expectException(NoContactsFoundException::class);
 
@@ -73,7 +60,7 @@ class KickoffContactFinderTest extends \PHPUnit_Framework_TestCase
         $this->getContactFinder()->getContacts(1, $limiter);
     }
 
-    public function testArrayCollectionIsReturnedForFoundContacts()
+    public function testArrayCollectionIsReturnedForFoundContacts(): void
     {
         $contactIds = [1, 2];
 
